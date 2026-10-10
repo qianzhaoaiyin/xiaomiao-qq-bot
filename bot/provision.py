@@ -15,6 +15,8 @@ import sys
 import time
 
 import paths
+import patch_humanize_send
+import patch_person_memory
 import patch_sticker_source
 
 DEFAULT_LLM = "deepseek-flash"
@@ -174,6 +176,27 @@ def offline():
         print("  [!] %s" % e)
     except FileNotFoundError as e:
         print("  [跳过] %s" % e)
+
+    print("  [补丁] 拟人化发送（分条之间有停顿）")
+    try:
+        patch_humanize_send.patch()
+    except SystemExit as e:
+        print("  [!] %s" % e)
+    except FileNotFoundError as e:
+        print("  [跳过] %s" % e)
+
+    # 跨场合记忆要改工作流里的记忆块，kirara 在跑的时候它退出时会用内存里的
+    # 旧值覆盖回去，所以必须等它停了再打
+    if running:
+        print("  [跳过] 跨场合记忆补丁（kirara 在跑，请先 scripts\\停止.cmd 再执行一次 provision）")
+    else:
+        print("  [补丁] 跨场合记忆（按人存）")
+        try:
+            patch_person_memory.patch()
+        except SystemExit as e:
+            print("  [!] %s" % e)
+        except FileNotFoundError as e:
+            print("  [跳过] %s" % e)
 
 
 # ---------------------------------------------------------------- online

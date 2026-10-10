@@ -17,8 +17,9 @@ pre-commit install
 ## 跑测试
 
 ```bash
-python -m unittest discover -s tests -v      # 39 例，全部离线，不碰网络
+python -m unittest discover -s tests -v      # 49 例，全部离线，不碰网络
 python tools/make_cmd.py --check             # 批处理编码与生成器一致性
+python tools/lint_persona.py --strict      # 人设体检，有警告就非 0
 python tools/sync_persona_to_workflows.py --check   # 工作流模板与 persona/ 是否同步
 python -m compileall -q bot tools tests      # 语法检查
 ```

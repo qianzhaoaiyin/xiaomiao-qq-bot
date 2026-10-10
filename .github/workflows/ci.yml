@@ -33,6 +33,9 @@ jobs:
       - name: 工作流模板与人设同步性
         run: python tools/sync_persona_to_workflows.py --check
 
+      - name: 人设体检
+        run: python tools/lint_persona.py --strict
+
       - name: 批处理脚本编码检查（GBK + CRLF，且与生成器一致）
         run: python tools/make_cmd.py --check
 

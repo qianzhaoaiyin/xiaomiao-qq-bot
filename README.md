@@ -112,14 +112,16 @@
 ## 目录结构
 
 ```
-├── bot/                     本项目自己写的代码（纯标准库）
+├── bot/
 │   ├── paths.py             路径与 .env 统一入口（整个文件夹可放任意位置）
 │   ├── gallery_server.py    本地表情包图库 HTTP 服务（含关键词打分算法）
 │   ├── sticker_collector.py 自动收录 + 视觉打标（"偷表情"）
-│   ├── watchdog.py          守护：掉线自动拉起 + 状态报告 + 通知主人
+│   ├── watchdog.py          守护：掉线自动拉起 + 熔断 + 藏窗口 + 自启开关 + 状态通知
 │   ├── apply_persona.py     把 persona/ 下两份文件应用为各工作流的人格
-│   ├── provision.py         一键把配置/工作流灌进 kirara 与 NapCat
+│   ├── provision.py         一键把配置/工作流灌进 kirara 与 NapCat，并打三个补丁
 │   ├── patch_sticker_source.py  把插件的失效图源换成本地图库
+│   ├── patch_humanize_send.py    给 OneBot 适配器加拟人化发送（分条停顿/深夜变慢）
+│   ├── patch_person_memory.py    加 PersonScope 作用域（跨场合记忆）
 │   ├── selftest.py          不依赖 QQ 的端到端自测
 │   └── kirara_api.py        kirara Web API 封装（含几个易踩的坑）
 ├── config/
@@ -134,8 +136,10 @@
 ├── scripts/                 Windows 批处理（GBK+CRLF，见下方注意事项）
 ├── tools/
 │   ├── make_cmd.py          生成上面那些 .cmd 的脚本（别手改 .cmd）
+│   ├── lint_persona.py      人设体检
+│   ├── deploy_github.py     一键部署到 GitHub（自检 → 提交 → 建仓 → 推送）
 │   └── sync_persona_to_workflows.py  把人设同步进工作流模板（--check 可校验）
-├── tests/                   39 个单元测试，全部离线
+├── tests/                   49 个单元测试，全部离线
 ├── .github/workflows/       CI：双系统 × 双 Python 版本 + 密钥扫描
 ├── 表情包/                   你的图库（不进版本库）
 ├── kirara/  napcat/          安装脚本下载的大件（不进版本库）
@@ -289,11 +293,139 @@ python tools/sync_persona_to_workflows.py --check   # 只校验（CI 会跑）
 - 状态**发生变化**时给主人发一条 QQ 私聊（不刷屏）
 - `scripts\停止.cmd` 会把守护置为暂停，不会你刚停它又给你拉起来
 - `scripts\状态.cmd` 随时看一眼健康状况和图库张数
+- 每轮巡检会把 `QQ.exe` 自己开的控制台窗口藏回去（见"开机静默自启"一节）
 
 日志在 `logs/watchdog.log`，超过 2MB 自动轮转一次。
 
 > 注意：QQ 登录态过期是守护**修不了**的（必须人扫码），它只能通知你。
 > 填好 `.env` 的 `BOT_QQ` 能让 NapCat 尝试免扫码快速登录，成功率看腾讯心情。
+
+### ⚠️ 熔断：为什么不能无脑重试
+
+**这条是踩过坑才加的。** 腾讯会检测机器人，被警告后**服务端开始不回包**
+（`code=-1 gotResponse=false`）—— 不是封号，是限速，继续作死会升级。
+
+最致命的触发原因是**重试风暴**：对方通道已经出问题时你还每 15 秒重试一次，
+"失败次数 ≈ 成功次数"，在腾讯眼里就是标准机器人。
+
+所以守护的行为是：
+
+| 情况 | 行为 |
+|---|---|
+| 正常掉线 | 拉起一次，等最多 45 秒确认端口起来了 |
+| 拉起后 45 秒还没起来 | 记一次失败 |
+| 连续 3 次失败 | **熔断 10 分钟**，期间只记日志、不再重试 |
+| 冷却结束 | 自动恢复试探 |
+| 中间任意一次成功 | 计数清零 |
+
+```python
+FAIL_STRIKES = 3      # 别调大
+COOLDOWN_SEC = 600
+BOOT_WAIT_SEC = 45
+```
+
+另外几条降低风险的细节（参考 `pinganbbOvO/ai-companion-kit` 教程第十三章）：
+
+- **发送频率**：`maxSendPerMinute` 建议 6、`maxSendPerHour` 建议 80。
+  群里开着 `fallback` 每条都回很容易超标，既费钱又有风险。
+- **不要做「正在输入」上报**：频繁调 `set_input_status` 本身就是风控触发点。
+  本项目的"拟人化发送"只做**停顿**，不做 typing 上报。
+- 被限速后**先停一天别聊**，风控会自己解。
+
+---
+
+## 开机静默自启
+
+```
+scripts\开机自启.cmd
+```
+
+三个选项：**1** 开启 / **2** 关闭 / **3** 显示 QQ 窗口（掉登录要扫码时用）。
+
+开启后写一个注册表项：
+
+```
+HKCU\Software\Microsoft\Windows\CurrentVersion\Run\XiaomiaoQQBot
+  = "<kirara 内置 pythonw.exe>" "<仓库>\bot\watchdog.py"
+```
+
+几点说明：
+
+- 注册表 Run 是**登录后**触发，不是开机就触发。
+- 必须用 **`pythonw.exe`**。用 `python.exe` 守护会弹黑窗口；更糟的是它拉起的
+  子进程会继承这个控制台，**控制台一关守护跟着一起死**。
+- 也别用"最小化"糊弄 —— 最小化的窗口还在任务栏里，不算无痕。
+- 守护会藏掉 `QQ.exe` 自己开的控制台窗口。`CREATE_NO_WINDOW` 只传给了
+  `NapCatWinBootMain.exe`，管不到它再 spawn 的 `QQ.exe`——**后者是控制台子系统
+  程序，会自己 `AllocConsole`**。
+
+---
+
+## 三个后加的能力
+
+### 1. 分条之间有停顿（拟人化发送）
+
+OneBot 适配器**本来就有**基础延时（`字数 × 0.1 + random(0.5, 1.5)` 秒，
+每个 `<break>` 段独立等待）。`bot/patch_humanize_send.py` 在此之上加了三样：
+
+| 行为 | 默认 | 环境变量 |
+|---|---|---|
+| 偶尔来一次长停顿（像在走神） | 22% 概率多停 3~9 秒 | `HUMANIZE_LONG_GAP_CHANCE` / `_MIN` / `_MAX` |
+| 深夜变慢（2:00~7:00） | 整体 ×1.6 | `HUMANIZE_NIGHT_FROM` / `_TO` / `_FACTOR` |
+| 单次最多拆几条 | 6 条，超出的并进最后一条 | `HUMANIZE_MAX_SEGMENTS` |
+| 单条最长等多久 | 12 秒封顶 | `HUMANIZE_MAX_DELAY` |
+| 总开关 | 开 | `HUMANIZE_ENABLED=0` 关闭 |
+
+实测（白天 6 字短消息）：最短 1.5s、中位 2.1s、最长 9.0s，约 15% 的情况超过 5 秒。
+
+> ⚠️ **只做停顿，不做「正在输入」上报**，理由见上面"可靠性"一节。
+
+### 2. 跨场合记忆（按人存）
+
+**改之前**：记忆按 `chat_id` 存 —— 同一个人的私聊是 `c2c:10001`，
+群里是 `group:1108327320`，**两套完全独立的记忆**。他在群里说的话，
+你私聊问它它不知道。
+
+**改之后**：`bot/patch_person_memory.py` 加了 `person` 作用域，记忆挂在**人**（QQ 号）上：
+
+```
+person:10001   ← 私聊和群里读写的是同一本账
+```
+
+而且**不同人之间仍然隔离** —— 不是简单开 `global`（那会把甲的私聊内容喂给乙）。
+
+> ⚠️ **有个坑**：真正决定成败的不是 `config.yaml` 里的 `memory.default_scope`，
+> 而是**工作流里记忆块自带的 `scope_type` 参数**（`internal:chat_memory_query` /
+> `internal:chat_memory_store`）—— 它优先于全局默认值。只改配置不改编块 = 白改。
+> 补丁脚本两个都改。
+>
+> ⚠️ 旧记忆文件**不会自动迁移**，`data/memory/c2c_*.json` 留着但不再被读到。
+
+### 3. 人设体检
+
+```
+scripts\人设体检.cmd
+# 或
+python tools/lint_persona.py            # 只报告
+python tools/lint_persona.py --strict   # 有警告就返回非 0（CI 用）
+```
+
+| 检查项 | 为什么 |
+|---|---|
+| 占位符 `{current_date_time}` / `{memory_content}` 在不在 | 缺了工作流直接跑不起来 |
+| 有没有写「怎么说话」 | 最影响像不像人的部分 |
+| 有没有写「不做什么」 | 没有边界的角色最容易跑偏 |
+| 有没有写情绪起伏 | 不写它会永远用同一个语气 |
+| 有没有对话样例 | 只靠描述很难写出稳定语气 |
+| **定义式**客服腔（`我是…助手` / `身份：…客服`） | 命中就一定写出客服腔 |
+| AI 味词出现在**非禁止语境** | 在黑名单里是正常的 |
+| 超长段落（>400 字）、总长超 12000 字 | 超长段落模型不敏感，超总长会被截断 |
+| 工具段有没有提 `<break>` | 不提它会把三句话塞进一个气泡 |
+| 有没有例外条款 | 只写「不要顺从」它会连正当要求一起拒绝 |
+
+设计上特意处理了**误报**：判定语境用「整句 + 上一行」，
+所以「不是客服腔」「AI 味黑名单（出现即失败）：」这类**在讲不要这么写**的句子不会报警。
+反向验证过：注入「我是你的客服助手」+「综上所述」两条都被抓出来，正常人设 0 提醒。
 
 ---
 
@@ -301,9 +433,10 @@ python tools/sync_persona_to_workflows.py --check   # 只校验（CI 会跑）
 
 ```bash
 python -m pip install -e ".[dev]"          # 只有 pyyaml + pre-commit
-python -m unittest discover -s tests -v    # 39 例，全离线，不碰网络
+python -m unittest discover -s tests -v    # 49 例，全离线，不碰网络
 python tools/make_cmd.py --check           # 批处理编码与生成器一致性
 python tools/sync_persona_to_workflows.py --check   # 工作流模板与人设是否同步
+python tools/lint_persona.py --strict # 人设体检，有警告就非 0
 pre-commit install                         # 提交前自动跑上面这些 + 密钥扫描
 ```
 

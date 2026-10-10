@@ -75,6 +75,25 @@ def find_python() -> str:
     return sys.executable or "python"
 
 
+def find_pythonw() -> str:
+    """找无窗口版（pythonw.exe）。用它拉起的东西**不会弹控制台**。
+
+    为什么必须有这个：用 python.exe 拉起的子进程会继承启动它的那个控制台，
+    控制台一关，守护跟着一起死。而"最小化"不算无痕——最小化的窗口还在任务栏里。
+    """
+    base = find_python()
+    cand = Path(base)
+    w = cand.with_name("pythonw.exe")
+    if w.exists():
+        return str(w)
+    return base
+
+
+def autostart_command() -> str:
+    """写进注册表 Run 项的启动命令（静默）。"""
+    return '"%s" "%s"' % (find_pythonw(), BOT_DIR / "watchdog.py")
+
+
 def site_packages() -> Path:
     """kirara 嵌入式 Python 的 site-packages 目录。"""
     for pat in ("WPy64-*/python/Lib/site-packages", "python/Lib/site-packages"):

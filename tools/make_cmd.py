@@ -169,11 +169,61 @@ echo ============================================================
 echo    守护进程：掉线自动拉起，状态变化时给你发 QQ 私聊
 echo ------------------------------------------------------------
 echo    巡检间隔由 .env 的 WATCHDOG_INTERVAL 控制（默认 60 秒）
+echo    连续 3 次拉不起会熔断 10 分钟（防重试风暴被腾讯风控）
+echo    每轮会把 QQ.exe 弹出来的控制台窗口藏回去
 echo    按 Ctrl+C 或关窗口即可停止守护（不会停机器人）
 echo    想彻底停机器人请用 scripts\\停止.cmd
 echo ============================================================
 echo.
 "%PY%" "%ROOT%\\bot\\watchdog.py"
+pause
+'''
+
+SCRIPTS["开机自启.cmd"] = HEADER + FIND_PY + '''title 开机静默自启
+echo ============================================================
+echo    登录 Windows 后自动静默启动机器人（不弹任何窗口）
+echo ------------------------------------------------------------
+echo    1. 开启开机自启
+echo    2. 关闭开机自启
+echo    3. 显示 QQ 窗口（掉登录要扫码时用）
+echo    0. 退出
+echo ============================================================
+echo.
+set "C="
+set /p "C=请选择: "
+if "%C%"=="1" goto on
+if "%C%"=="2" goto off
+if "%C%"=="3" goto showqq
+exit /b
+
+:on
+"%PY%" "%ROOT%\\bot\\watchdog.py" --install-autostart
+echo.
+pause
+exit /b
+
+:off
+"%PY%" "%ROOT%\\bot\\watchdog.py" --uninstall-autostart
+echo.
+pause
+exit /b
+
+:showqq
+"%PY%" "%ROOT%\\bot\\watchdog.py" --show-qq
+echo.
+pause
+exit /b
+'''
+
+SCRIPTS["人设体检.cmd"] = HEADER + FIND_PY + '''title 人设体检
+echo ============================================================
+echo    检查 persona\\ 下的两份文件有没有常见毛病
+echo ------------------------------------------------------------
+echo    改完人设先跑这个，再跑 应用人设.cmd
+echo ============================================================
+echo.
+"%PY%" "%ROOT%\\tools\\lint_persona.py"
+echo.
 pause
 '''
 

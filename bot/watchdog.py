@@ -33,6 +33,28 @@ STATE_FILE = LOG_DIR / "watchdog-state.json"
 NAPCAT_HTTP = "http://127.0.0.1:3002"
 MAX_LOG_BYTES = 2 * 1024 * 1024
 
+# ---- 熔断参数（防风控，别调大）----
+# 腾讯会检测机器人。参考 ai-companion-kit 教程第十三章：对方通道已经出问题的时候
+# 还每 15 秒重试一次，"失败次数 ≈ 成功次数"，在腾讯眼里就是标准机器人。
+# 症状不是封号而是限速：服务端开始不回包（code=-1 gotResponse=false）。
+# 所以连续拉起失败就停手，别骚扰服务器。
+FAIL_STRIKES = 3# 连续几次拉起不到就算失败
+COOLDOWN_SEC = 600           # 熔断后冷静多久（秒）
+BOOT_WAIT_SEC = 45           # 拉起后等多久算"起来了"
+
+# ---- 藏窗口 ----
+# NapCat 拉起的 QQ.exe 是控制台子系统程序，它会**自己** AllocConsole 开一个
+# ConsoleWindowClass 窗口（标题是 QQ.exe 的完整路径）。
+# 我们给 NapCat 启动器传的 DETACHED_PROCESS 只对它自己生效，管不到 QQ.exe。
+# 开机自启时这个窗口会直接怼到桌面上，只能事后藏。
+HIDE_QQ_WINDOW = (paths.env("HIDE_QQ_WINDOW") or "1") != "0"
+_CONSOLE_CLASSES = ("ConsoleWindowClass", "PseudoConsoleWindow", "CASCADIA_HOSTING_WIN")
+_QQ_PROCS = ("qq.exe", "napcatwinbootmain.exe")
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_NAME = "XiaomiaoQQBot"
+
+_breaker = {}
+
 
 def log(msg):
     line = "%s %s" % (datetime.now().strftime("%m-%d %H:%M:%S"), msg)
@@ -101,7 +123,159 @@ def start_napcat():
 
 
 def _flags():
-    return 0x00000008 if os.name == "nt" else 0   # DETACHED_PROCESS
+    """子进程不分配控制台、脱离本进程组。
+
+    注意用 CREATE_NO_WINDOW 而不是"最小化"：最小化的窗口仍在任务栏里，不算无痕。
+    """
+    if os.name != "nt":
+        return 0
+    return 0x08000000 | 0x00000008 | 0x00000200  # NO_WINDOW | DETACHED | NEW_PROCESS_GROUP
+
+
+# ------------------------------------------------------------------ 熔断
+def breaker_allow(name):
+    st = _breaker.get(name)
+    return not st or time.time() >= st["open_until"]
+
+
+def breaker_fail(name):
+    st = _breaker.setdefault(name, {"strikes": 0, "open_until": 0})
+    st["strikes"] += 1
+    if st["strikes"] >= FAIL_STRIKES:
+        st["open_until"] = time.time() + COOLDOWN_SEC
+        st["strikes"] = 0
+        log("★ 熔断 %s：连续 %d 次拉起都没成功，暂停重试 %d 秒"
+            % (name, FAIL_STRIKES, COOLDOWN_SEC))
+        log("  盲目重试会被腾讯当成机器人。被限速时先停一天别聊，再看 --once 的输出。")
+        return False
+    return True
+
+
+def breaker_ok(name):
+    if name in _breaker:
+        _breaker[name]["strikes"] = 0
+
+
+# ------------------------------------------------------------------ 藏窗口
+def _napcat_pids():
+    """属于本实例的 NapCat / QQ 进程 PID 集合。"""
+    try:
+        import psutil
+    except ImportError:
+        return set()
+    pids = set()
+    for p in psutil.process_iter(["name", "cmdline"]):
+        try:
+            name = (p.info["name"] or "").lower()
+            cmd = " ".join(p.info["cmdline"] or [])
+        except Exception:
+            continue
+        if name in _QQ_PROCS and str(paths.NAPCAT_DIR).lower() in cmd.lower():
+            pids.add(p.pid)
+    return pids
+
+
+def _each_window(pids):
+    """枚举这些进程的顶层窗口，返回 (hwnd, 窗口类, 是否可见, pid)。"""
+    import ctypes
+    from ctypes import wintypes
+    if os.name != "nt":
+        return []
+    try:
+        u = ctypes.windll.user32
+    except Exception:
+        return []
+    proto = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    out = []
+
+    def cb(h, _):
+        pid = wintypes.DWORD()
+        u.GetWindowThreadProcessId(h, ctypes.byref(pid))
+        if pid.value in pids:
+            cls = ctypes.create_unicode_buffer(256)
+            u.GetClassNameW(h, cls, 256)
+            out.append((h, cls.value, bool(u.IsWindowVisible(h)), pid.value))
+        return True
+
+    u.EnumWindows(proto(cb), 0)
+    return out
+
+
+def hide_napcat_windows(verbose=False):
+    """把 QQ.exe 自己开的控制台窗口藏掉，返回藏了几个。
+
+    为什么不用"最小化"：最小化的窗口还在任务栏里，用户一眼就看到有东西在跑。
+    要"完全静默"就得让窗口从来没被创建过，或者创建后立刻藏掉。
+    """
+    if os.name != "nt" or not HIDE_QQ_WINDOW:
+        return 0
+    import ctypes
+    pids = _napcat_pids()
+    if not pids:
+        return 0
+    hidden = 0
+    for hwnd, cls, vis, pid in _each_window(pids):
+        if vis and cls in _CONSOLE_CLASSES:
+            ctypes.windll.user32.ShowWindow(hwnd, 0)   # SW_HIDE
+            hidden += 1
+            if verbose:
+                log("  已藏起 %s 的控制台窗口（PID %d）" % (cls, pid))
+    return hidden
+
+
+def show_qq_windows():
+    """把窗口显示出来 —— 掉登录需要人扫码时用。"""
+    import ctypes
+    pids = _napcat_pids()
+    if not pids:
+        print("没找到 NapCat/QQ 进程")
+        return
+    n = 0
+    for hwnd, cls, _vis, _pid in _each_window(pids):
+        if cls in _CONSOLE_CLASSES:
+            ctypes.windll.user32.ShowWindow(hwnd, 5)   # SW_SHOW
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+            n += 1
+    print("已显示 %d 个窗口，扫码吧。扫完关掉，守护会重新藏起来。" % n)
+
+
+# ------------------------------------------------------------------ 开机自启
+def autostart_installed():
+    if os.name != "nt":
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            return bool(winreg.QueryValueEx(k, RUN_NAME)[0])
+    except FileNotFoundError:
+        return False
+    except Exception:
+        return False
+
+
+def install_autostart():
+    import winreg
+    cmd = paths.autostart_command()
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
+                        winreg.KEY_READ | winreg.KEY_WRITE) as k:
+        winreg.SetValueEx(k, RUN_NAME, 0, winreg.REG_SZ, cmd)
+    print("已开启开机静默自启：")
+    print("  位置：HKEY_CURRENT_USER\\%s\\%s" % (RUN_KEY, RUN_NAME))
+    print("  命令：%s" % cmd)
+    print()
+    print("下次登录 Windows 会自动静默启动（不弹任何窗口）。")
+    print("注意：注册表 Run 项是**登录后**才跑，不是开机就跑。")
+
+
+def uninstall_autostart():
+    import winreg
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0,
+                            winreg.KEY_READ | winreg.KEY_WRITE) as k:
+            winreg.DeleteValue(k, RUN_NAME)
+        print("已关闭开机自启。")
+    except FileNotFoundError:
+        print("本来就没有开机自启。")
 
 
 def notify(text):
@@ -182,6 +356,37 @@ def report():
     return total == len(st)
 
 
+def restart_component(name, port, spawn, wait):
+    """掉线了就把这一个拉起来。拉不起来就记一次熔断。
+
+    分成"一个组件一个组件"是有意的：某一项失败不该把其它项也拖下水，
+    更不该形成无限重试风暴。
+    """
+    if port_open(port):
+        breaker_ok(name)
+        return True
+    if not breaker_allow(name):
+        log("  %s 还在熔断期，本轮不重试" % name)
+        return False
+    log("  %s 掉线（端口 %d），拉起 ..." % (name, port))
+    try:
+        spawn()
+    except Exception as e:
+        log("  %s 拉起时报错：%s" % (name, str(e)[:100]))
+        breaker_fail(name)
+        return False
+    deadline = time.time() + BOOT_WAIT_SEC
+    while time.time() < deadline:
+        time.sleep(5)
+        if port_open(port):
+            log("  %s 已恢复" % name)
+            breaker_ok(name)
+            return True
+    log("  %s 拉起后 %d 秒仍未监听端口 %d" % (name, BOOT_WAIT_SEC, port))
+    breaker_fail(name)
+    return False
+
+
 def tick():
     st = probe()
     prev = load_state()
@@ -195,16 +400,19 @@ def tick():
         prev[name] = ok
 
     if not ok_all(st) and not paused:
-        if not st["图库"][0]:
-            start_gallery()
-            time.sleep(3)
-        if not st["kirara"][0]:
-            start_kirara()
-            time.sleep(12)
-        if not st["NapCat"][0]:
-            start_napcat()
-            time.sleep(15)
+        gp = paths.gallery_port()
+        np_ = int(paths.env("NAPCAT_WEBUI_PORT") or 6100)
+        # 顺序有讲究：协议端先起，主程序再起，图库最后（互不依赖但先重后轻）
+        restart_component("NapCat", np_, start_napcat, 15)
+        restart_component("kirara", paths.KIRARA_PORT, start_kirara, 12)
+        restart_component("图库", gp, start_gallery, 3)
+        # QQ.exe 起来后会自己开一个控制台窗口，连藏几次（它可能晚几秒才弹）
+        for _ in range(6):
+            hide_napcat_windows(verbose=True)
+            time.sleep(2)
         st = probe()
+
+    hide_napcat_windows(verbose=True)
 
     for name, ok, detail in changed:
         log("%s -> %s（%s）" % (name, "恢复" if ok else "异常", detail))
@@ -226,12 +434,21 @@ def main():
         return set_guard("paused")
     if "--resume" in sys.argv:
         return set_guard("running")
+    if "--install-autostart" in sys.argv:
+        return install_autostart()
+    if "--uninstall-autostart" in sys.argv:
+        return uninstall_autostart()
+    if "--show-qq" in sys.argv:
+        return show_qq_windows()
     if "--once" in sys.argv:
         sys.exit(0 if report() else 1)
     interval = int(paths.env("WATCHDOG_INTERVAL") or 60)
     paths.ensure_dirs()
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     log("守护启动，每 %d 秒巡检一次（暂停标记：%s）" % (interval, PAUSE_FILE))
+    log("熔断：连续 %d 次拉不起就暂停 %d 秒；藏窗口：%s"
+        % (FAIL_STRIKES, COOLDOWN_SEC, "开" if HIDE_QQ_WINDOW else "关"))
+    log("开机自启：%s" % ("已开启" if autostart_installed() else "未开启"))
     notify("【小喵】守护进程已启动，我会自己照顾自己了")
     while True:
         try:

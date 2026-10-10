@@ -17,7 +17,10 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "bot"))
 
 import paths  # noqa: E402
+import patch_humanize_send as phs  # noqa: E402
+import patch_person_memory as ppm  # noqa: E402
 import patch_sticker_source as pss  # noqa: E402
+import watchdog  # noqa: E402
 
 try:
     import yaml
@@ -254,6 +257,271 @@ class PatchTest(unittest.TestCase):
             self.assertEqual(len(backups), 1, "应该留下且只留下一份备份")
         finally:
             paths.site_packages = old
+
+
+# 下面是两个新补丁的夹具：内容取自**打补丁之前**的上游源码。
+# 只测"补丁能打上去"是不够的——还得测幂等、语法、以及打完之后行为是对的。
+ORIG_ADAPTER_HEAD = """from typing import Dict, Optional, Set, Any, List
+import asyncio
+import functools
+import random
+import time
+from urllib.parse import urlparse
+"""
+
+ORIG_FLUSH = """                # 计算延时
+                duration = max(text_length * 0.1, 1) + random.uniform(0.5, 1.5)
+                await asyncio.sleep(duration)"""
+
+# 缩进必须和真实上游一致：flush 的 body 在 16 空格、发送循环在 12 空格。
+# 否则夹具本身就语法错误，测的就不是补丁了。
+ORIG_CLASS = '''class OneBotAdapter:
+    async def send_message(self):
+        text_length = 0
+        async def flush():
+            nonlocal text_length
+            if not buffer:
+                return
+                # 计算延时
+                duration = max(text_length * 0.1, 1) + random.uniform(0.5, 1.5)
+                await asyncio.sleep(duration)
+            for segment in segments:
+                # 判断是否需要flush
+                if segment.type in ("text", "record", "video", "rps", "dice", "shake", "poke", "share", "contact", "location"):
+                    await flush()
+                    buffer = [segment]
+                    if segment.type == "text":
+                        text_length = len(segment.data.get("text", ""))
+'''
+
+ORIG_SCOPES = '''from kirara_ai.im.sender import ChatSender, ChatType
+
+from .base import MemoryScope
+
+
+class MemberScope(MemoryScope):
+    """群成员作用域"""
+
+    def get_scope_key(self, sender: ChatSender) -> str:
+        if sender.chat_type == ChatType.GROUP:
+            return f"member:{sender.group_id}:{sender.user_id}"
+        else:
+            return f"c2c:{sender.user_id}"
+
+    def is_in_scope(self, target_sender, query_sender) -> bool:
+        if target_sender.chat_type != query_sender.chat_type:
+            return False
+        return target_sender.user_id == query_sender.user_id
+
+
+class GlobalScope(MemoryScope):
+    """全局作用域"""
+
+    def get_scope_key(self, sender):
+        return "global"
+
+    def is_in_scope(self, target_sender, query_sender) -> bool:
+        return True
+'''
+
+ORIG_SCOPES_INIT = """from .base import MemoryScope
+from .builtin_scopes import GlobalScope, GroupScope, MemberScope
+
+__all__ = ["MemoryScope", "MemberScope", "GroupScope", "GlobalScope"]
+"""
+
+ORIG_ENTRY = """from kirara_ai.memory.scopes import GlobalScope, GroupScope, MemberScope
+
+
+def setup():
+    memory_manager.register_scope("member", MemberScope)
+    memory_manager.register_scope("group", GroupScope)
+    memory_manager.register_scope("global", GlobalScope)
+"""
+
+WF = """blocks:
+  - type: internal:chat_memory_query
+    name: query_memory
+    params:
+      scope_type: group
+  - type: internal:chat_memory_store
+    name: memory_store
+    params:
+      scope_type: group
+  - type: internal:chat_completion
+    name: llm
+    params:
+      model_name: deepseek-flash
+"""
+
+
+class HumanizePatchTest(unittest.TestCase):
+    def _fake(self):
+        d = Path(tempfile.mkdtemp())
+        pkg = d / "im_onebot_adapters"
+        pkg.mkdir()
+        (pkg / "adapter.py").write_text(
+            ORIG_ADAPTER_HEAD + "\n" + ORIG_CLASS, encoding="utf-8")
+        return d
+
+    def test_幂等且语法正确(self):
+        d = self._fake()
+        old = paths.site_packages
+        paths.site_packages = lambda: d
+        try:
+            self.assertTrue(phs.patch(verbose=False), "首次应该真的改")
+            self.assertFalse(phs.patch(verbose=False), "第二次必须是 no-op")
+            import py_compile
+            py_compile.compile(str(d / "im_onebot_adapters" / "adapter.py"), doraise=True)
+            self.assertEqual(len(list((d / "im_onebot_adapters").glob("*.orig-*"))), 1,
+                             "应该留下且只留下一份备份")
+        finally:
+            paths.site_packages = old
+
+    def test_补丁后行为正确(self):
+        d = self._fake()
+        old = paths.site_packages
+        paths.site_packages = lambda: d
+        try:
+            phs.patch(verbose=False)
+            text = (d / "im_onebot_adapters" / "adapter.py").read_text(encoding="utf-8")
+            self.assertIn("def humanize_delay", text)
+            self.assertIn("HUMANIZE_MAX_SEGMENTS", text, "没有条数上限，模型一激动能刷爆群")
+            self.assertIn("HUMANIZE_NIGHT_FACTOR", text, "没有深夜变慢")
+            self.assertIn("sent_groups", text, "条数上限没接进发送循环")
+            # 辅助函数必须在 class 之前，否则 class 里引用不到
+            self.assertLess(text.index("def humanize_delay"), text.index("class OneBotAdapter"))
+            # 逐个采样，确认确实产生了长停顿
+            head = text[:text.index("class OneBotAdapter")]
+            ns = {"__name__": "adapter_head"}
+            exec(compile(head, "adapter_head", "exec"), ns)
+            ds = [ns["humanize_delay"](6) for _ in range(300)]
+            self.assertGreater(max(ds), 3.0, "300 次采样里至少要出现一次长停顿（>3秒）")
+            self.assertLessEqual(max(ds), ns["HUMANIZE_MAX_DELAY"], "不能超过封顶值")
+        finally:
+            paths.site_packages = old
+
+    def test_结构对不上时明确报错而不是乱改(self):
+        d = self._fake()
+        (d / "im_onebot_adapters" / "adapter.py").write_text("# 结构完全不一样\n", encoding="utf-8")
+        old = paths.site_packages
+        paths.site_packages = lambda: d
+        try:
+            with self.assertRaises(SystemExit):
+                phs.patch(verbose=False)
+        finally:
+            paths.site_packages = old
+
+
+class PersonMemoryPatchTest(unittest.TestCase):
+    def _fake(self):
+        d = Path(tempfile.mkdtemp())
+        sp = d / "site-packages"
+        (sp / "kirara_ai" / "memory" / "scopes").mkdir(parents=True)
+        (sp / "kirara_ai").mkdir(exist_ok=True)
+        (sp / "kirara_ai" / "memory" / "scopes" / "builtin_scopes.py").write_text(
+            ORIG_SCOPES, encoding="utf-8")
+        (sp / "kirara_ai" / "memory" / "scopes" / "__init__.py").write_text(
+            ORIG_SCOPES_INIT, encoding="utf-8")
+        (sp / "kirara_ai" / "entry.py").write_text(ORIG_ENTRY, encoding="utf-8")
+        return d
+
+    def test_幂等_语法正确_工作流也被改了(self):
+        d = self._fake()
+        sp = d / "site-packages"
+        wfdir = d / "data" / "workflows" / "chat"
+        wfdir.mkdir(parents=True)
+        (wfdir / "tools.yaml").write_text(WF, encoding="utf-8")
+
+        old_sp, old_data = paths.site_packages, paths.kirara_data_dir
+        paths.site_packages = lambda: sp
+        paths.kirara_data_dir = lambda: d / "data"
+        try:
+            self.assertTrue(ppm.patch(verbose=False), "首次应该真的改")
+            self.assertFalse(ppm.patch(verbose=False), "第二次必须是 no-op")
+            import py_compile
+            for rel in ("kirara_ai/memory/scopes/builtin_scopes.py",
+                        "kirara_ai/memory/scopes/__init__.py",
+                        "kirara_ai/entry.py"):
+                py_compile.compile(str(sp / rel), doraise=True)
+            # 工作流里的记忆块必须一起改——只改 config.yaml 是没用的
+            got = (wfdir / "tools.yaml").read_text(encoding="utf-8")
+            self.assertEqual(got.count("scope_type: person"), 2,
+                             "两个记忆块都要改成 person")
+            self.assertNotIn("scope_type: group", got)
+        finally:
+            paths.site_packages, paths.kirara_data_dir = old_sp, old_data
+
+    def test_PersonScope真的跨场合且不串人(self):
+        """直接验证作用域类本身，而不只是检查文件里有没有那个字符串。"""
+        import types
+
+        class FakeChatType:
+            GROUP, C2C = "group", "c2c"
+
+        class FakeSender:
+            def __init__(self, user_id, chat_type, group_id=None):
+                self.user_id, self.chat_type, self.group_id = user_id, chat_type, group_id
+
+        ns = types.ModuleType("fake")
+        ns.__dict__["__name__"] = "fake_scopes"
+        # 去掉相对导入，夹具里没法建包
+        src = (ORIG_SCOPES + ppm.PERSON_SCOPE).replace("from .base import MemoryScope", "")
+        exec(compile(src, "scopes", "exec"),
+             {"__name__": "fake_scopes",
+              "ChatSender": FakeSender, "ChatType": FakeChatType,
+              "MemoryScope": type("MemoryScope", (), {})}, ns.__dict__)
+        ps = ns.PersonScope()
+        c2c = FakeSender("10001", "c2c")
+        grp = FakeSender("10001", "group", "999")
+        other = FakeSender("20002", "c2c")
+
+        self.assertEqual(ps.get_scope_key(c2c), ps.get_scope_key(grp),
+                         "同一个人的私聊和群聊必须落在同一个桶")
+        self.assertTrue(ps.is_in_scope(c2c, grp), "私聊记忆群里的自己应该能读到")
+        self.assertTrue(ps.is_in_scope(grp, c2c), "群里记忆私聊的自己应该能读到")
+        self.assertFalse(ps.is_in_scope(other, c2c), "不能读到别人，否则是隐私泄露")
+
+        ms = ns.MemberScope()
+        self.assertFalse(ms.is_in_scope(grp, c2c),
+                         "旧的 member 作用域本来就不跨场合（这是补丁要解决的原因）")
+
+
+class WatchdogSafetyTest(unittest.TestCase):
+    def test_熔断参数是保守值(self):
+        # 这三个数字是拿真账号被限速的教训定的，别让人随手调大
+        self.assertEqual(watchdog.FAIL_STRIKES, 3)
+        self.assertGreaterEqual(watchdog.COOLDOWN_SEC, 300)
+        self.assertGreaterEqual(watchdog.BOOT_WAIT_SEC, 30)
+
+    def test_熔断_三次失败后停止重试(self):
+        import time as _t
+        watchdog._breaker.clear()
+        self.assertTrue(watchdog.breaker_allow("kirara"))
+        self.assertTrue(watchdog.breaker_fail("X"))
+        self.assertTrue(watchdog.breaker_fail("X"))
+        self.assertFalse(watchdog.breaker_fail("X"), "第三次失败就该熔断")
+        self.assertFalse(watchdog.breaker_allow("X"), "熔断期间不允许重试")
+        watchdog._breaker["X"]["open_until"] = _t.time() - 1
+        self.assertTrue(watchdog.breaker_allow("X"), "冷却结束后自动恢复")
+        watchdog._breaker.clear()
+
+    def test_成功一次就清零(self):
+        watchdog._breaker.clear()
+        watchdog.breaker_fail("Y")
+        watchdog.breaker_ok("Y")
+        self.assertEqual(watchdog._breaker["Y"]["strikes"], 0)
+        watchdog._breaker.clear()
+
+    def test_藏窗口只针对控制台类(self):
+        self.assertIn("ConsoleWindowClass", watchdog._CONSOLE_CLASSES)
+        self.assertIn("PseudoConsoleWindow", watchdog._CONSOLE_CLASSES)
+
+    def test_自启命令用pythonw(self):
+        cmd = paths.autostart_command()
+        self.assertIn("watchdog.py", cmd)
+        if os.name == "nt" and "pythonw" in paths.find_python().lower():
+            self.assertIn("pythonw", cmd, "自启必须用 pythonw，否则开机弹黑窗")
 
 
 if __name__ == "__main__":
