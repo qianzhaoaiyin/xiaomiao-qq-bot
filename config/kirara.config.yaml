@@ -6,6 +6,9 @@ ims:
     websocket_url: /im/websocket/onebot/kirara01/ws
     access_token: KiraraQQ2026
     heartbeat_interval: 15
+# http_legacy 适配器：提供 POST http://127.0.0.1:8080/v1/chat 测试通道，
+# bot/selftest.py 靠它在「QQ 还没扫码登录」时做端到端自测。
+# 它只跟随 web.host 绑定在 127.0.0.1，不对外暴露。不需要自测可以把 enable 改成 false。
 - name: test_http
   enable: true
   adapter: http_legacy
@@ -15,15 +18,17 @@ llms:
   - name: deepseek
     adapter: DeepSeek
     config:
+      # 安装时由 bot/provision.py 用 .env 里的 DEEPSEEK_API_KEY 替换，切勿把真实 key 提交进仓库
       api_key: ${DEEPSEEK_API_KEY}
       api_base: https://api.deepseek.com/v1
     enable: true
     models:
-    - deepseek-flash
-    - deepseek-v4-pro
-    - deepseek-v4-flash-vision-exp
+    - deepseek-flash                      # 便宜：工具决策、群聊
+    - deepseek-v4-pro                     # 复杂推理备用
+    - deepseek-v4-flash-vision-exp        # 视觉：看懂表情包（思考模型，max_tokens 别给太小）
 defaults:
-  llm_model: gemini-1.5-flash
+  # 上游模板这里写的是 gemini-1.5-flash（并不存在的后端），会导致未指定模型的块报错，已纠正
+  llm_model: deepseek-flash
 memory:
   persistence:
     type: file
