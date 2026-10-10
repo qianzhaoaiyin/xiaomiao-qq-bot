@@ -1,0 +1,65 @@
+ims:
+- name: qq_onebot
+  enable: true
+  adapter: onebot
+  config:
+    websocket_url: /im/websocket/onebot/kirara01/ws
+    access_token: KiraraQQ2026
+    heartbeat_interval: 15
+- name: test_http
+  enable: true
+  adapter: http_legacy
+  config: {}
+llms:
+  api_backends:
+  - name: deepseek
+    adapter: DeepSeek
+    config:
+      api_key: ${DEEPSEEK_API_KEY}
+      api_base: https://api.deepseek.com/v1
+    enable: true
+    models:
+    - deepseek-flash
+    - deepseek-v4-pro
+    - deepseek-v4-flash-vision-exp
+defaults:
+  llm_model: gemini-1.5-flash
+memory:
+  persistence:
+    type: file
+    file:
+      storage_dir: ./data/memory
+    redis:
+      host: localhost
+      port: 6379
+      db: 0
+  max_entries: 100
+  default_scope: member
+web:
+  host: 127.0.0.1
+  port: 8080
+  secret_key: ''
+  password_file: ./data/web/password.hash
+plugins:
+  enable:
+  - im_onebot_adapters
+  - chatgpt-mirai-qq-bot-web-search
+  - web_search
+  - chatgpt-mirai-qq-bot-scheduler
+  - chatgpt-mirai-qq-bot-api-collection
+  - scheduler
+  - api_collection
+  market_base_url: https://kirara-plugin.app.lss233.com/api/v1
+update:
+  pypi_registry: https://pypi.org/simple
+  npm_registry: https://registry.npmjs.org
+frpc:
+  enable: false
+  server_addr: ''
+  server_port: 7000
+  token: ''
+  remote_port: 0
+system:
+  timezone: Asia/Shanghai
+tracing:
+  llm_tracing_content: false

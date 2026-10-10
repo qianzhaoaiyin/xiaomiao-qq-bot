@@ -1,0 +1,45 @@
+{
+  "network": {
+    "httpServers": [
+      {
+        "name": "local-http-api",
+        "enable": true,
+        "host": "127.0.0.1",
+        "port": 3002,
+        "enableCors": true,
+        "messagePostFormat": "array",
+        "token": "",
+        "debug": false,
+        "enableWebsocket": false
+      }
+    ],
+    "httpClients": [],
+    "websocketServers": [],
+    "websocketClients": [
+      {
+        "name": "kirara",
+        "enable": true,
+        "url": "ws://127.0.0.1:8080/im/websocket/onebot/kirara01/ws",
+        "reportSelfMessage": false,
+        "messagePostFormat": "array",
+        "token": "KiraraQQ2026",
+        "debug": false,
+        "heartInterval": 30000,
+        "reconnectInterval": 3000,
+        "verifyCertificate": true
+      }
+    ],
+    "httpSseServers": [],
+    "plugins": []
+  },
+  "musicSignUrl": "",
+  "enableLocalFile2Url": false,
+  "parseMultMsg": false,
+  "imageDownloadProxy": "",
+  "timeout": {
+    "baseTimeout": 10000,
+    "uploadSpeedKBps": 256,
+    "downloadSpeedKBps": 256,
+    "maxTimeout": 1800000
+  }
+}

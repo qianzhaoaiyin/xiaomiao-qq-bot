@@ -1,0 +1,110 @@
+# -*- coding: utf-8 -*-
+"""项目路径与环境变量的统一入口。
+
+仓库根目录就是运行根目录：所有相对路径都基于本文件所在目录的上一级，
+所以整个文件夹可以放在任何盘、任何路径下，克隆下来即可用。
+"""
+import os
+import sys
+from pathlib import Path
+
+BOT_DIR = Path(__file__).resolve().parent
+ROOT = BOT_DIR.parent
+
+KIRARA_DIR = ROOT / "kirara"          # 由安装脚本下载解压，不进版本库
+NAPCAT_DIR = ROOT / "napcat"          # 同上
+GALLERY_DIR = ROOT / "表情包"          # 本地图库（不进版本库）
+CONFIG_DIR = ROOT / "config"
+WORKFLOW_DIR = CONFIG_DIR / "workflows"
+PERSONA_FILE = ROOT / "persona" / "人设.txt"
+ENV_FILE = ROOT / ".env"
+DOWNLOAD_DIR = ROOT / "downloads"
+
+KIRARA_HOST = "127.0.0.1"
+KIRARA_PORT = 8080
+KIRARA_BASE = "http://%s:%d" % (KIRARA_HOST, KIRARA_PORT)
+KIRARA_API = KIRARA_BASE + "/backend-api"
+
+DEFAULT_GALLERY_PORT = 3100
+DEFAULT_WEBUI_PASSWORD = "ChangeMe@1234"   # 仅兜底，实际以 .env 里的 KIRARA_WEBUI_PASSWORD 为准
+
+
+def load_env() -> dict:
+    """读 .env（不覆盖已存在的真实环境变量）。"""
+    env = {}
+    if ENV_FILE.exists():
+        for line in ENV_FILE.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip()
+    merged = dict(env)
+    merged.update({k: v for k, v in os.environ.items() if k in env})
+    return merged
+
+
+def env(key: str, default: str = "") -> str:
+    return load_env().get(key) or os.environ.get(key) or default
+
+
+def gallery_port() -> int:
+    return int(env("GALLERY_PORT", str(DEFAULT_GALLERY_PORT)))
+
+
+def gallery_url() -> str:
+    return "http://127.0.0.1:%d" % gallery_port()
+
+
+def webui_password() -> str:
+    return env("KIRARA_WEBUI_PASSWORD", DEFAULT_WEBUI_PASSWORD)
+
+
+def find_python() -> str:
+    """找 kirara 自带的嵌入式 Python（版本号会变，所以用通配）。"""
+    for pat in ("WPy64-*/python/python.exe", "WPy64-*/python/python",
+                "python/python.exe", "python.exe"):
+        hits = sorted(KIRARA_DIR.glob(pat)) if KIRARA_DIR.exists() else []
+        if hits:
+            return str(hits[0])
+    return sys.executable or "python"
+
+
+def site_packages() -> Path:
+    """kirara 嵌入式 Python 的 site-packages 目录。"""
+    for pat in ("WPy64-*/python/Lib/site-packages", "python/Lib/site-packages"):
+        hits = sorted(KIRARA_DIR.glob(pat)) if KIRARA_DIR.exists() else []
+        if hits:
+            return hits[0]
+    raise FileNotFoundError("找不到 kirara 的 site-packages，请先运行 scripts\\安装.cmd")
+
+
+def napcat_launcher() -> Path:
+    """NapCat 的启动器（不同版本名字可能是 NapCatWinBootMain.exe 或 NapCatBoot.exe）。"""
+    if not NAPCAT_DIR.exists():
+        raise FileNotFoundError("找不到 napcat 目录，请先运行 scripts\\安装.cmd")
+    for name in ("NapCatWinBootMain.exe", "NapCatBoot.exe", "NapCat.Shell.exe"):
+        hits = sorted(NAPCAT_DIR.rglob(name))
+        if hits:
+            return hits[0]
+    raise FileNotFoundError("napcat 目录里找不到启动器 exe")
+
+
+def napcat_config_dir() -> Path:
+    """NapCat 的 config 目录（webui.json / onebot11*.json 在这里）。"""
+    for pat in ("versions/*/resources/app/napcat/config", "napcat/config", "config"):
+        hits = sorted(NAPCAT_DIR.glob(pat)) if NAPCAT_DIR.exists() else []
+        if hits:
+            return hits[0]
+    raise FileNotFoundError("找不到 NapCat 的 config 目录")
+
+
+def kirara_data_dir() -> Path:
+    return KIRARA_DIR / "data"
+
+
+def ensure_dirs():
+    for d in (GALLERY_DIR, DOWNLOAD_DIR):
+        d.mkdir(parents=True, exist_ok=True)
+    for sub in ("开心", "无语", "疑惑", "安慰", "晚安", "打招呼", "随机", "偷来的"):
+        (GALLERY_DIR / sub).mkdir(parents=True, exist_ok=True)

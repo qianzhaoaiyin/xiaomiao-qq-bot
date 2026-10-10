@@ -1,0 +1,15 @@
+# 默认按文本处理，工作区用 LF
+* text=auto eol=lf
+
+*.py    text eol=lf
+*.md    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.txt   text eol=lf
+*.ps1   text eol=crlf
+
+# .cmd 必须是 GBK + CRLF 才能被 cmd.exe 正确解析。
+# 标记为 binary，防止 git 做换行转换或编码探测把文件弄坏。
+# 要改批处理请改 tools/make_cmd.py 后重新生成，不要直接编辑 scripts/*.cmd。
+*.cmd binary

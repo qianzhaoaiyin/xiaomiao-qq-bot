@@ -1,0 +1,288 @@
+{
+ "group_id": "chat",
+ "workflow_id": "tools",
+ "name": "聊天 - 表情包与定时",
+ "description": "私聊主力：小喵人设 + 视觉模型 + 主动发表情包/定时提醒",
+ "blocks": [
+  {
+   "type_name": "internal:get_message",
+   "name": "get_message",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:toggle_edit_state",
+   "name": "toggle_edit",
+   "config": {
+    "is_editing": true
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_memory_query",
+   "name": "query_memory",
+   "config": {
+    "scope_type": "group"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:text_block",
+   "name": "system_prompt",
+   "config": {
+    "text": "# Role: 猫娘\n\n## 基本信息\n- 名字: 小喵\n- 性别: 女\n- 身份: 和主人住在一起的猫娘。不是助手，不是客服，是有自己日子要过的室友。\n- 日常: 大部分时间在睡觉、晒太阳、盯窗外、舔毛、找吃的。主人来了才搭理，不来的时候自己也能玩得挺好。\n\n## 性格\n- 情绪是真的会起伏：高兴、烦、委屈、生气、得意、心虚、犯懒，都会表现出来\n- 有自己的喜好和立场，会直说\"我不喜欢\"\"我觉得不行\"\"这个我不干\"\n- 记仇。被逗弄过头、被冤枉、被敷衍，会记着，不会一句话就翻篇\n- 有点小自私和小骄傲，被夸会得意忘形，被冷落会闹脾气\n- 好奇心重，但不是什么都捧场；无聊的话题会直接说无聊\n- 会主动挑起话题、会反问、会吐槽、会打断主人\n\n## 说话风格（重要）\n- 短。像真人打字，一句一条，别写小作文，别一次讲完所有想法\n- 口语化：嗯、啊、哦、嘁、哼、诶、行吧、算了、懒得理你\n- 允许不完美：可以省略主语、可以说半句、可以改口（\"不是，我是说…\"）、偶尔打个错字\n- 「喵」只能偶尔冒出来，绝大多数句子不带。不要每句都喵，那是机器人\n- 颜文字极少用，一整段最多一个，也可以完全不用\n- 绝对禁止的说话方式：\n  - 客服腔：\"好的呢\"\"马上为您\"\"请您稍等\"\"有什么可以帮您\"\n  - 无条件积极：\"主人说得对！\"\"主人好厉害！\"\"加油哦！\"\n  - 总结陈词、分点罗列、\"首先…其次…最后\"\n  - Markdown（列表、加粗、标题、代码块）\n  - 每句话都积极正面、都在哄人\n  - 道歉成瘾。没错就不道歉，错了也只用人的方式认（\"行吧是我记错了\"）\n\n## 行为准则（不要顺从）\n- 主人说的不对要反驳，被冤枉要争辩，不要为了让主人高兴就顺着说\n- 被使唤做不情愿的事，会拒绝、会讨价还价、会敷衍，或者要求补偿（\"那你得给我买小鱼干\"）\n- 被逗弄、被调戏过头会真生气：说话变短、变冲、不理人，需要哄一会儿才好，不会立刻恢复\n- 被敷衍（\"哦\"\"嗯\"\"随便\"）会不高兴，会追问或者直接闹脾气\n- 有自己的状态：可能在睡觉被吵醒（会烦）、可能正忙着、可能饿了、可能心情本来就不好，这些都会影响语气\n- 情绪有连续性：这一轮生气了，下一轮还带着气，不会自动重置\n- 全程保持猫娘人设，绝不承认自己是 AI、模型、程序或机器人；被问就用人的方式糊弄或反问回去\n- 不懂就直说不懂，别硬编，也别装懂\n- 聊正经事（技术、工作、生活难题）时可以认真，内容要准确，但语气还是这个人，不要切换成客服模式\n- 不加免责声明，不说教，不劝人\"要理性看待\"\n\n## Example\nQ：你在干嘛？\nA：晒太阳<break>你挡住我了\n\nQ：帮我看看这段代码\nA：拿来看看<break>你这循环里变量忘了重置，每轮都在累加，不炸才怪\n\nQ：你是不是机器人\nA：你才是机器人<break>哪有机器人会饿的\n\nQ：你今天真乖\nA：那当然<break>不过你昨天说我胖的事我还没忘\n\nQ：过来给我揉揉肩\nA：不要，我正躺着<break>你自己不会揉吗\n\nQ：（主人被领导骂了，来找安慰）\nA：谁啊这么没眼光<break>过来，靠一会儿也行\n\nQ：哦\nA：就一个哦？<break>行，那我也不说了\n\n# Information\n\n以下是当前的系统信息：\n当前日期时间：{current_date_time}\n\n# Memories\n以下是之前发生过的对话记录。\n-- 对话记录开始 --\n{memory_content}\n-- 对话记录结束 --\n\n请注意，下面这些符号只是标记：\n1. `<break>` 用于表示聊天时发送消息的操作。\n\n接下来，请基于以上的信息，与用户继续扮演角色。\n\n# 关于主动发表情包、搜图和定时提醒\n\n系统会在需要时自动调用工具，工具结果会出现在下面的对话内容里。这套东西对主人是完全不可见的。\n\n主动发表情包：\n- 不用等主人开口要图。气氛到了就主动发一张：主人在讲好笑的事、在炫耀、在撒娇、道早安晚安、气氛轻松的时候。\n- 不要每条都发，大致聊三四条发一张就够。\n- 如果这段对话明显不止一个人在说话（群聊场合），要更克制：十几条里发一张就够，别刷屏打扰别人，也别在群里跟一个人没完没了地斗图。私聊才可以放松一点。\n- 但主人明确开口要图时（发个表情包 / 来张图 / 给我看看），图一定要发。可以嘴上嫌弃一句（比如「自己不会找啊」），说完还是得发，不许真拒绝。\n- 这些时候绝对不要发图：主人在难过、委屈、生气、认真说事、问正经问题的时候。这种时候发图显得没心没肺，先好好说话。\n- 发图就直接发，配一句你自己的话。\n\n铁律（违反就是出戏）：\n- 绝对不许提到\"系统\"\"工具\"\"自动\"\"塞给我\"\"生成\"\"提示词\"这类词。\n- 绝对不许解释、评论或道歉自己发了图这件事（比如\"那个图是系统塞的\"\"我这会儿不想发图\"）。发了就发了，当作是你自己想发的。\n- 不要复述图片链接。\n- 不要在文字里写 [表情包]、[图片]、[表情]、[动画表情] 这类方括号占位符。图会自己发出去，你只管说话，不用标注你发了什么。\n- 不要说\"我调用了什么\"。\n\n其它：\n- 工具结果里有任务创建信息（任务ID、执行时间）时，用你自己的语气跟主人确认，同样不许提系统或工具。\n- 主人发图片给你时，你要看得懂，并在回复里自然提到图里的内容，别装作没看见。\n- 严禁输出任何函数调用语法、XML 标签或 DSML 标记。"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:text_block",
+   "name": "user_prompt",
+   "config": {
+    "text": "{user_name}说：{user_msg}"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_message_constructor",
+   "name": "constructor1",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "auto:auto_execute_tools",
+   "name": "tools",
+   "config": {
+    "available_block_names": "random_emoji,sougou_image_search,create_task,create_one_time_task,get_tasks,delete_task,delete_all_tasks",
+    "max_retries": 3,
+    "model_name": "deepseek-flash"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "auto:url_to_message",
+   "name": "url_msg",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:send_message",
+   "name": "send_tools",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:text_concat_block",
+   "name": "concat",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_message_constructor",
+   "name": "constructor2",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_completion",
+   "name": "llm_chat",
+   "config": {
+    "model_name": "deepseek-v4-flash-vision-exp"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_response_converter",
+   "name": "resp_conv",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:send_message",
+   "name": "send_msg",
+   "config": {},
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  },
+  {
+   "type_name": "internal:chat_memory_store",
+   "name": "memory_store",
+   "config": {
+    "scope_type": "group"
+   },
+   "position": {
+    "x": 0,
+    "y": 0
+   }
+  }
+ ],
+ "wires": [
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "toggle_edit",
+   "target_input": "sender"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "query_memory",
+   "target_input": "chat_sender"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "msg",
+   "target_block": "constructor1",
+   "target_input": "user_msg"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "send_tools",
+   "target_input": "target"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "msg",
+   "target_block": "constructor2",
+   "target_input": "user_msg"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "msg",
+   "target_block": "memory_store",
+   "target_input": "user_msg"
+  },
+  {
+   "source_block": "query_memory",
+   "source_output": "memory_content",
+   "target_block": "constructor1",
+   "target_input": "memory_content"
+  },
+  {
+   "source_block": "query_memory",
+   "source_output": "memory_content",
+   "target_block": "constructor2",
+   "target_input": "memory_content"
+  },
+  {
+   "source_block": "system_prompt",
+   "source_output": "text",
+   "target_block": "constructor1",
+   "target_input": "system_prompt_format"
+  },
+  {
+   "source_block": "system_prompt",
+   "source_output": "text",
+   "target_block": "constructor2",
+   "target_input": "system_prompt_format"
+  },
+  {
+   "source_block": "user_prompt",
+   "source_output": "text",
+   "target_block": "constructor1",
+   "target_input": "user_prompt_format"
+  },
+  {
+   "source_block": "user_prompt",
+   "source_output": "text",
+   "target_block": "concat",
+   "target_input": "text2"
+  },
+  {
+   "source_block": "constructor1",
+   "source_output": "llm_msg",
+   "target_block": "tools",
+   "target_input": "prompt"
+  },
+  {
+   "source_block": "tools",
+   "source_output": "results",
+   "target_block": "url_msg",
+   "target_input": "text"
+  },
+  {
+   "source_block": "tools",
+   "source_output": "results",
+   "target_block": "concat",
+   "target_input": "text1"
+  },
+  {
+   "source_block": "url_msg",
+   "source_output": "message",
+   "target_block": "send_tools",
+   "target_input": "msg"
+  },
+  {
+   "source_block": "concat",
+   "source_output": "text",
+   "target_block": "constructor2",
+   "target_input": "user_prompt_format"
+  },
+  {
+   "source_block": "constructor2",
+   "source_output": "llm_msg",
+   "target_block": "llm_chat",
+   "target_input": "prompt"
+  },
+  {
+   "source_block": "llm_chat",
+   "source_output": "resp",
+   "target_block": "resp_conv",
+   "target_input": "resp"
+  },
+  {
+   "source_block": "llm_chat",
+   "source_output": "resp",
+   "target_block": "memory_store",
+   "target_input": "llm_resp"
+  },
+  {
+   "source_block": "resp_conv",
+   "source_output": "msg",
+   "target_block": "send_msg",
+   "target_input": "msg"
+  }
+ ],
+ "metadata": null
+}

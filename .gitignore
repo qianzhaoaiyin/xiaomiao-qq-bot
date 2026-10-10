@@ -1,0 +1,35 @@
+# ===== 运行时大件：由 scripts/安装.cmd 自动下载，不进版本库 =====
+/kirara/
+/napcat/
+*.zip
+*.7z
+
+# ===== 密钥与本机配置 =====
+.env
+.env.local
+token.txt
+/config/kirara.config.local.yaml
+
+# ===== 表情包图库 =====
+# 里面有从聊天里自动收录的图，涉及他人隐私与版权，绝不提交
+/表情包/*/*
+!/表情包/*/.gitkeep
+
+# ===== 运行时产物 =====
+*.log
+/logs/
+/data/
+__pycache__/
+*.pyc
+*.pyo
+QQ登录二维码.png
+qrcode.png
+*.bak
+*.bak-*
+
+# ===== 编辑器 / 系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

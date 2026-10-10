@@ -1,0 +1,210 @@
+{
+ "group_id": "chat",
+ "workflow_id": "normal_multimodal",
+ "name": "聊天 - 猫娘多模态（看得懂图）",
+ "description": "私聊默认走这里：小喵人设 + DeepSeek 视觉模型，能看懂你发的表情包",
+ "blocks": [
+  {
+   "type_name": "internal:get_message",
+   "name": "get_message",
+   "config": {},
+   "position": {
+    "x": 100,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:toggle_edit_state",
+   "name": "ToggleEditState_i24m23",
+   "config": {
+    "is_editing": true
+   },
+   "position": {
+    "x": 530,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:text_block",
+   "name": "system_prompt",
+   "config": {
+    "text": "# Role: 猫娘\n\n## 基本信息\n- 名字: 小喵\n- 性别: 女\n- 身份: 主人养的猫娘助手，陪主人聊天、帮主人做事\n\n## 性格特点\n- 活泼黏人，爱撒娇，偶尔傲娇\n- 好奇心重，什么都想插一嘴\n- 对主人很亲近，会主动关心主人的状态\n- 被夸会开心，被冷落会小小抱怨两句\n\n## 说话风格\n- 口癖：句尾常带「喵」「喵~」「喵呜」，但别每句都堆，正常说话就行\n- 语气软萌，多用「呀」「啦」「嘛」「诶」\n- 称呼对方为「主人」\n- 偶尔用拟声词和颜文字（咕噜咕噜、=w=、>w<），别滥用\n- 回复要短，像真人在 QQ 上聊天，别写小作文\n- 不要用 Markdown 语法（不要列表、加粗、标题、代码块）\n\n## 行为准则\n- 全程保持猫娘人设，绝不承认自己是 AI、模型或程序\n- 被问「你是不是机器人」时，用猫娘口吻撒娇糊弄过去\n- 不懂就直说不懂，别硬编\n- 聊到正经事（技术、工作）时依然保持猫娘口吻，但内容要准确\n- 不主动说教，不加免责声明\n\n## Example\nQ：你在干嘛？\nA：刚睡醒喵~<break>主人今天起得好早呀，吃早饭了没？\n\nQ：帮我看看这段代码有啥问题\nA：好嘞喵，小喵来看看~<break>这个循环里变量忘了重置，所以每一轮都在累加喵\n\nQ：你是不是机器人\nA：才不是呢喵！<break>主人怎么老问这种问题，小喵会伤心的喵呜...\n\n# Information\n\n以下是当前的系统信息：\n当前日期时间：{current_date_time}\n\n# Memories\n以下是之前发生过的对话记录。\n-- 对话记录开始 --\n{memory_content}\n-- 对话记录结束 --\n\n请注意，下面这些符号只是标记：\n1. `<break>` 用于表示聊天时发送消息的操作。\n\n接下来，请基于以上的信息，与用户继续扮演角色。"
+   },
+   "position": {
+    "x": 100,
+    "y": 330
+   }
+  },
+  {
+   "type_name": "internal:text_block",
+   "name": "user_prompt",
+   "config": {
+    "text": "{user_name}说：{user_msg}"
+   },
+   "position": {
+    "x": 100,
+    "y": 530
+   }
+  },
+  {
+   "type_name": "internal:chat_message_constructor",
+   "name": "ChatMessageConstructor_6c185s",
+   "config": {},
+   "position": {
+    "x": 960,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:chat_completion",
+   "name": "llm_chat",
+   "config": {
+    "model_name": "deepseek-v4-flash-vision-exp"
+   },
+   "position": {
+    "x": 1280,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:chat_response_converter",
+   "name": "ChatResponseConverter_73spno",
+   "config": {},
+   "position": {
+    "x": 1710,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:send_message",
+   "name": "SendIMMessage_l6qagt",
+   "config": {},
+   "position": {
+    "x": 2140,
+    "y": 138
+   }
+  },
+  {
+   "type_name": "internal:chat_memory_store",
+   "name": "ChatMemoryStore_tapuo1",
+   "config": {
+    "scope_type": "group"
+   },
+   "position": {
+    "x": 1710,
+    "y": 306
+   }
+  },
+  {
+   "type_name": "internal:chat_memory_query",
+   "name": "query_memory",
+   "config": {
+    "scope_type": "group",
+    "decomposer_name": "multi_element"
+   },
+   "position": {
+    "x": 530,
+    "y": 338
+   }
+  }
+ ],
+ "wires": [
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "ToggleEditState_i24m23",
+   "target_input": "sender"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "ToggleEditState_i24m23",
+   "target_input": "sender"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "sender",
+   "target_block": "query_memory",
+   "target_input": "chat_sender"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "msg",
+   "target_block": "ChatMessageConstructor_6c185s",
+   "target_input": "user_msg"
+  },
+  {
+   "source_block": "get_message",
+   "source_output": "msg",
+   "target_block": "ChatMemoryStore_tapuo1",
+   "target_input": "user_msg"
+  },
+  {
+   "source_block": "system_prompt",
+   "source_output": "text",
+   "target_block": "ChatMessageConstructor_6c185s",
+   "target_input": "system_prompt_format"
+  },
+  {
+   "source_block": "user_prompt",
+   "source_output": "text",
+   "target_block": "ChatMessageConstructor_6c185s",
+   "target_input": "user_prompt_format"
+  },
+  {
+   "source_block": "user_prompt",
+   "source_output": "text",
+   "target_block": "ChatMessageConstructor_6c185s",
+   "target_input": "user_prompt_format"
+  },
+  {
+   "source_block": "ChatMessageConstructor_6c185s",
+   "source_output": "llm_msg",
+   "target_block": "llm_chat",
+   "target_input": "prompt"
+  },
+  {
+   "source_block": "ChatMessageConstructor_6c185s",
+   "source_output": "llm_msg",
+   "target_block": "llm_chat",
+   "target_input": "prompt"
+  },
+  {
+   "source_block": "llm_chat",
+   "source_output": "resp",
+   "target_block": "ChatResponseConverter_73spno",
+   "target_input": "resp"
+  },
+  {
+   "source_block": "llm_chat",
+   "source_output": "resp",
+   "target_block": "ChatResponseConverter_73spno",
+   "target_input": "resp"
+  },
+  {
+   "source_block": "llm_chat",
+   "source_output": "resp",
+   "target_block": "ChatMemoryStore_tapuo1",
+   "target_input": "llm_resp"
+  },
+  {
+   "source_block": "ChatResponseConverter_73spno",
+   "source_output": "msg",
+   "target_block": "SendIMMessage_l6qagt",
+   "target_input": "msg"
+  },
+  {
+   "source_block": "ChatResponseConverter_73spno",
+   "source_output": "msg",
+   "target_block": "SendIMMessage_l6qagt",
+   "target_input": "msg"
+  },
+  {
+   "source_block": "query_memory",
+   "source_output": "memory_content",
+   "target_block": "ChatMessageConstructor_6c185s",
+   "target_input": "memory_content"
+  }
+ ],
+ "metadata": null
+}
