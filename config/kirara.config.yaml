@@ -4,7 +4,10 @@ ims:
   adapter: onebot
   config:
     websocket_url: /im/websocket/onebot/kirara01/ws
-    access_token: KiraraQQ2026
+    # 由 bot/provision.py 用 .env 里的 ONEBOT_TOKEN 替换。
+    # 这是 kirara 与 NapCat 之间的本地握手口令（只走 127.0.0.1），
+    # 但仍属于本机配置，不该出现在公开仓库里。
+    access_token: ${ONEBOT_TOKEN}
     heartbeat_interval: 15
 # http_legacy 适配器：提供 POST http://127.0.0.1:8080/v1/chat 测试通道，
 # bot/selftest.py 靠它在「QQ 还没扫码登录」时做端到端自测。

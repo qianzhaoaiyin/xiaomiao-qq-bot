@@ -9,6 +9,7 @@
 """
 import json
 import re
+import secrets
 import shutil
 import sys
 import time
@@ -43,6 +44,17 @@ def ensure_env():
     sys.exit(2)
 
 
+def onebot_token(env):
+    """反向 WS 的握手口令。留空就现生成一个随机的，避免用户忘了填。"""
+    tok = (env.get("ONEBOT_TOKEN") or "").strip()
+    if tok and "在这里填" in tok:
+        tok = ""
+    if not tok:
+        tok = secrets.token_urlsafe(18)
+        print("  [生成] .env 里没写 ONEBOT_TOKEN，已自动生成一个随机口令")
+    return tok
+
+
 def write_kirara_config(env):
     tpl = paths.CONFIG_DIR / "kirara.config.yaml"
     dst = paths.kirara_data_dir() / "config.yaml"
@@ -54,6 +66,7 @@ def write_kirara_config(env):
         print("  [!] .env 里的 DEEPSEEK_API_KEY 还没填，先跳过主配置")
         return
     text = tpl.read_text(encoding="utf-8").replace("${DEEPSEEK_API_KEY}", key)
+    text = text.replace("${ONEBOT_TOKEN}", onebot_token(env))
     # 原始模板里默认模型是个不存在的 gemini-1.5-flash，纠正成我们真配了的模型
     text = re.sub(r"(llm_model:\s*)\S+", r"\g<1>" + DEFAULT_LLM, text)
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -101,16 +114,19 @@ def write_napcat_config(env):
     # 1) OneBot 反向 WS
     src = paths.CONFIG_DIR / "napcat.onebot11.json"
     if src.exists():
+        # 模板里写的是 ${ONEBOT_TOKEN} 占位符，抄过去之前先替换掉
+        raw = src.read_text(encoding="utf-8")
+        raw = raw.replace("${ONEBOT_TOKEN}", onebot_token(env))
         for name in ("onebot11.json",):
             dst = cfg_dir / name
             _backup(dst)
-            shutil.copy2(str(src), str(dst))
+            dst.write_text(raw, encoding="utf-8")
             print("  [写入] NapCat %s（反向 WS -> kirara:8080，本地 HTTP 3002）" % name)
         bot_qq = (env.get("BOT_QQ") or "").strip()
         if bot_qq:
             dst = cfg_dir / ("onebot11_%s.json" % bot_qq)
             if not dst.exists():
-                shutil.copy2(str(src), str(dst))
+                dst.write_text(raw, encoding="utf-8")
                 print("  [写入] NapCat onebot11_%s.json" % bot_qq)
     # 2) WebUI 端口钉死 + 自动登录账号
     webui = cfg_dir / "webui.json"

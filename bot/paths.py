@@ -16,7 +16,12 @@ NAPCAT_DIR = ROOT / "napcat"          # 同上
 GALLERY_DIR = ROOT / "表情包"          # 本地图库（不进版本库）
 CONFIG_DIR = ROOT / "config"
 WORKFLOW_DIR = CONFIG_DIR / "workflows"
-PERSONA_FILE = ROOT / "persona" / "人设.txt"
+PERSONA_DIR = ROOT / "persona"
+# 人设拆成两个文件：人设.txt 是角色本身，工具段.txt 是系统填充部分
+# （时间/记忆占位符、<break> 规则、图片规则、工具说明）。
+# 分开的理由：改工具说明不需要动角色设定，也不会把占位符改坏。
+PERSONA_FILE = PERSONA_DIR / "人设.txt"
+TOOLS_FILE = PERSONA_DIR / "工具段.txt"
 ENV_FILE = ROOT / ".env"
 DOWNLOAD_DIR = ROOT / "downloads"
 
@@ -108,3 +113,32 @@ def ensure_dirs():
         d.mkdir(parents=True, exist_ok=True)
     for sub in ("开心", "无语", "疑惑", "安慰", "晚安", "打招呼", "随机", "偷来的"):
         (GALLERY_DIR / sub).mkdir(parents=True, exist_ok=True)
+
+
+# system_prompt 里不能丢的占位符：丢了机器人就会失忆 / 不知道当前时间
+REQUIRED_PLACEHOLDERS = ("{current_date_time}", "{memory_content}")
+
+
+def build_system_prompt() -> str:
+    """人设.txt + 工具段.txt拼成完整的 system_prompt。
+
+    故意做成「整段替换」而不是「切掉 # Information 之前的部分」：
+    后者会把工具说明锁死在数据库里，改人设时容易和新设定打架。
+    这里两段都是仓库里的纯文本文件，改哪个改哪个。
+
+    缺占位符时直接抛错——宁可让人改文件，也不写坏工作流。
+    """
+    for f in (PERSONA_FILE, TOOLS_FILE):
+        if not f.exists():
+            raise FileNotFoundError("缺少 %s" % f)
+    persona = PERSONA_FILE.read_text(encoding="utf-8").strip()
+    tools = TOOLS_FILE.read_text(encoding="utf-8").strip()
+    if not persona:
+        raise ValueError("%s 是空的" % PERSONA_FILE.name)
+    if not tools:
+        raise ValueError("%s 是空的" % TOOLS_FILE.name)
+    for ph in REQUIRED_PLACEHOLDERS:
+        if ph not in tools:
+            raise ValueError("%s 里缺少占位符 %s，会写出跑不起来的工作流"
+                             % (TOOLS_FILE.name, ph))
+    return persona + "\n\n" + tools

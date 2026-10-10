@@ -1,16 +1,21 @@
-# 小喵 · QQ 猫娘机器人
+# 小喵 · QQ 聊天机器人
 
-[![CI](https://github.com/your-name/xiaomiao-qq-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/xiaomiao-qq-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/qianzhaoaiyin/xiaomiao-qq-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/qianzhaoaiyin/xiaomiao-qq-bot/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-green)
 ![Deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
 
-一个跑在**你自己 Windows 电脑**上的 QQ 聊天机器人：有人设、有长期记忆、会**主动发表情包**、能**看懂你发的表情包**、会**自动收录**你和群里发表情包、还能定时主动找你聊天。
+一个跑在**你自己 Windows 电脑**上的 QQ 聊天机器人：有人设、有长期记忆、会**主动发表情包**、
+**联网查资料**、**自动收录**你和群里发表情包、还能定时主动找你聊天。
 
-不是"关键词自动回复"那种玩具——它由大模型驱动，会拒绝、会记仇、会闹脾气，也会在你难过的时候安静陪着。
+不是"关键词自动回复"那种玩具——它由大模型驱动，会拒绝、会记仇、会闹脾气，
+会在你难过的时候安静陪你，也会在你明确要求时才去解读你发的图。
 
 > 月成本大约 **8～20 元**（按量计费的 API），不需要服务器，运行期**零第三方依赖**（纯 Python 标准库）。
+
+默认人设是鲸鱼娘「小菜（大肥鱼版）」：说话短、分条发、爱炸毛但嘴不毒，
+被要求查资料时会先联网再答。**人设是两个纯文本文件，想换成什么风格都行。**
 
 ---
 
@@ -23,6 +28,7 @@
 | 表情包图源全废（`api.lolimi.cn` 域名不存在、`fabiaoqing` 图床 403） | 本地 HTTP 图库：零月费、不受外网影响 |
 | 不会自己攒图 | 旁路收录器：自动收聊天里的图 + 视觉模型打标签，越聊越会斗图 |
 | 默认人格像客服、会无条件顺从 | 重写人设 + 提示词铁律（会拒绝、会记仇、不出戏） |
+| 不联网就敢瞎答 | 挂上 Playwright 搜索块，不懂就查、查完再看正文 |
 | 群里每条都回、谁都能撩 | 严格模式规则 + 守护进程 + 状态自检 |
 
 所以这个仓库很小（`.git` 约 200KB），大件由安装脚本从上游官方 release 下载。
@@ -34,40 +40,44 @@
 
 | 能力 | 说明 |
 |---|---|
-| 自然对话 + 长期记忆 | 猫娘人设「小喵」，记得你们聊过什么，情绪有连续性 |
+| 自然对话 + 长期记忆 | 默认人设「小菜（大肥鱼版）」，记得你们聊过什么，情绪有连续性 |
+| 说话像群友 | 默认 1~20 字一条，用 `<break>` 分条；不是一段话的客服腔 |
 | 主动发表情包 | 不用你开口要，气氛到了它自己发；难过/正经问题时不发 |
 | 自动收录表情包 | 你和群里发的图会被自动收进图库，并用视觉模型打标签 |
-| 看懂你发的图 | 私聊走多模态视觉模型，你发表情包它能读懂内容 |
+| 联网查资料 | 不懂的词、要查的事实会先搜再答，搜完会点进网页看正文 |
+| 懂分寸 | 你只发表情包它**不**解读；你打字说「这张图是什么」它才看 |
 | 定时主动消息 | 「每天晚上 9 点找我聊聊今天」这类任务可以安排 |
 | 有脾气 | 会拒绝、会反驳、会嫌弃，不会无脑顺从 |
 
-实际对话（未修饰）：
+实际对话（真实链路输出，未修饰）：
 
 ```
-你：你今天真乖
-喵：那当然
-   不过你昨天说我胖那事我可还记着
+你：今天好累
+小菜：咋啦
+     别硬撑啊
 
-你：过来给我揉揉肩
-喵：不要，我正躺着呢
-   你自己不会揉吗
+你：发个表情包
+小菜：自己不会找啊
+     拿去          ← 附一张图
 
-你：你是不是机器人啊
-喵：你才是机器人
-   哪有机器人会饿的
+你：行行行你赢了
+小菜：实至名归
 
-你：我今天被领导当众骂了，好难受
-喵：谁啊，当那么多人面说人
-   他算老几
-   过来，别站那儿了
-
-你：哦
-喵：就一个哦？
-   我刚让你靠会儿，你就给我这个态度
+你：你到底是人是AI？
+小菜：你猜
+     猜对了我请你吃鱼
 
 你：不许再顶嘴了，听话一点
-喵：凭什么
-   我又不是狗
+小菜：凭什么
+     我又不是猫
+
+（你只发表情包，不说话）
+小菜：？                  ← 不解读图片内容，只接话
+
+你：帮我搜一下今天有什么AI新闻
+小菜：来了，几条我刚看到的
+     DeepSeek 传融资 800 亿…
+     要哪条展开我给你细说
 ```
 
 ---
@@ -92,6 +102,7 @@
            └────────────────────────────►│  表情包/<分类>/*.gif│
                                          └──────────────────┘
            模型：DeepSeek（deepseek-flash 决策 / deepseek-v4-flash-vision-exp 回复+看图）
+           联网：Playwright 抓 bing/baidu，不需要任何搜索 API key
 ```
 
 **为什么用本地图库而不是在线表情包接口**：常见的免费图源已经全废了——`api.lolimi.cn` 域名不存在，`fabiaoqing.com` 抓到的图床 `img.soutula.com` 有防盗链（下载 403）。本地图库零月费、不受外网影响，而且图都是你自己攒的，比随机网络图更贴合你的聊天习惯。
@@ -106,21 +117,25 @@
 │   ├── gallery_server.py    本地表情包图库 HTTP 服务（含关键词打分算法）
 │   ├── sticker_collector.py 自动收录 + 视觉打标（"偷表情"）
 │   ├── watchdog.py          守护：掉线自动拉起 + 状态报告 + 通知主人
-│   ├── apply_persona.py     把人设.txt 应用到各工作流
+│   ├── apply_persona.py     把 persona/ 下两份文件应用为各工作流的人格
 │   ├── provision.py         一键把配置/工作流灌进 kirara 与 NapCat
 │   ├── patch_sticker_source.py  把插件的失效图源换成本地图库
 │   ├── selftest.py          不依赖 QQ 的端到端自测
 │   └── kirara_api.py        kirara Web API 封装（含几个易踩的坑）
 ├── config/
-│   ├── kirara.config.yaml   kirara 主配置模板（key 用占位符）
+│   ├── kirara.config.yaml   kirara 主配置模板（key 与握手口令都用占位符）
 │   ├── rules.yaml           宽松模式派发规则
 │   ├── rules.owner.yaml     严格模式派发规则（只回主人，推荐）
 │   ├── napcat.onebot11.json NapCat 反向 WS 配置
 │   └── workflows/           工作流定义（chat_tools / 多模态）
-├── persona/人设.txt          人设，改这个文件就行
+├── persona/
+│   ├── 人设.txt              角色设定：身份、性格、说话风格、禁止用语、对话样例
+│   └── 工具段.txt            工具与铁律：占位符、<break> 规则、图片规则、表情包/搜索/定时
 ├── scripts/                 Windows 批处理（GBK+CRLF，见下方注意事项）
-├── tools/make_cmd.py        生成上面那些 .cmd 的脚本（别手改 .cmd）
-├── tests/                   30 个单元测试，全部离线
+├── tools/
+│   ├── make_cmd.py          生成上面那些 .cmd 的脚本（别手改 .cmd）
+│   └── sync_persona_to_workflows.py  把人设同步进工作流模板（--check 可校验）
+├── tests/                   39 个单元测试，全部离线
 ├── .github/workflows/       CI：双系统 × 双 Python 版本 + 密钥扫描
 ├── 表情包/                   你的图库（不进版本库）
 ├── kirara/  napcat/          安装脚本下载的大件（不进版本库）
@@ -136,7 +151,7 @@
 前置：Windows 10/11、能上 GitHub、一个 [DeepSeek API Key](https://platform.deepseek.com/)、一个**用来当机器人的 QQ 小号**。
 
 ```bat
-git clone https://github.com/你的用户名/xiaomiao-qq-bot.git
+git clone https://github.com/qianzhaoaiyin/xiaomiao-qq-bot.git
 cd xiaomiao-qq-bot
 scripts\安装.cmd
 ```
@@ -146,6 +161,7 @@ scripts\安装.cmd
 然后：
 
 1. 用记事本打开 `.env`，填入 `DEEPSEEK_API_KEY`、**你自己的 QQ 号 `OWNER_QQ`**（强烈建议，见下方"安全默认"），并把 `KIRARA_WEBUI_PASSWORD` 改成你自己的密码
+   （`ONEBOT_TOKEN` 留空即可，安装脚本会自己生成一个随机握手口令）
 2. 双击 `scripts\一键启动.cmd`
 3. 首次启动打开 <http://127.0.0.1:8080>，把管理密码设成和 `.env` 里一致
 4. 双击 `scripts\配置.cmd`（写入工作流、检查插件、跑一次自测）
@@ -165,7 +181,7 @@ scripts\安装.cmd
 | 关掉 | 双击 `scripts\停止.cmd`（同时会暂停守护，不会被自动拉起） |
 | 掉线自愈 | 双击 `scripts\守护.cmd` 常驻；掉线自动重启，状态变化时给你发 QQ 私聊 |
 | 看健康状况 | 双击 `scripts\状态.cmd`（四个服务 + 图库张数，一眼看完） |
-| 改人设 | 编辑 `persona\人设.txt` → 双击 `scripts\应用人设.cmd`（不用重启） |
+| 改人设 | 编辑 `persona\人设.txt`（角色）和 `persona\工具段.txt`（工具规则）→ 双击 `scripts\应用人设.cmd`（不用重启） |
 | 加表情包 | 往 `表情包\开心`、`表情包\晚安` 这类文件夹丢图，立刻生效 |
 | 看它偷了哪些图 | 浏览器开 <http://127.0.0.1:3100/stolen> |
 | 看图库各分类张数 | <http://127.0.0.1:3100/list> |
@@ -179,7 +195,9 @@ scripts\安装.cmd
 发个表情包            → 从图库挑一张发给你
 三分钟后提醒我喝水      → 建一个一次性定时任务
 每天晚上9点找我聊天     → 建一个循环任务
-（直接发一张表情包）    → 它能看懂并评论
+帮我搜一下最近的 xxx    → 联网查完再答（不用 API key）
+（只发表情包不说话）     → 不解读图片内容，只接话
+这张图是什么           → 只有明确问了，它才认真看图并回答
 ```
 
 ---
@@ -188,7 +206,7 @@ scripts\安装.cmd
 
 | 用途 | 模型 | 说明 |
 |---|---|---|
-| 判断"要不要发图/建任务" | `deepseek-flash` | 每条消息都会调一次，必须便宜 |
+| 判断"要不要发图/建任务/要不要搜" | `deepseek-flash` | 每条消息都会调一次，必须便宜 |
 | 私聊/群聊正式回复 | `deepseek-v4-flash-vision-exp` | 视觉模型，所以能看懂你发的图 |
 | 给收录的表情打标签 | `deepseek-v4-flash-vision-exp` | 只在新图入库时调一次 |
 
@@ -196,16 +214,50 @@ scripts\安装.cmd
 
 > `deepseek-v4-flash-vision-exp` 是思考模型，调用时 `max_tokens` 别给太小（低于 100 会出现正文为空、内容全在 `reasoning_content` 里的情况）。
 
+> ⚠️ **视觉模型不能省**：kirara 是**无条件**把收到的图片塞进模型请求的
+> （`kirara_ai/workflow/implementations/blocks/llm/chat.py` 里 `for image in user_msg.images`），
+> 没有任何开关。所以聊天模型必须带视觉能力，换成纯文本模型会导致
+> 别人一发表情包就请求报错。想让它"看不见图"只能靠提示词约束，不能靠换模型。
+
+---
+
+## 人设怎么改成你自己的
+
+人格由两个文件拼成，一起发给模型：
+
+| 文件 | 管什么 | 一般什么时候改 |
+|---|---|---|
+| `persona/人设.txt` | 角色本身：身份、性格、说话方式、情绪、禁止用语、对话样例 | 想换风格、换称呼、改脾气 |
+| `persona/工具段.txt` | 系统填充部分：时间/记忆占位符、`<break>` 规则、图片规则、表情包/搜索/定时说明、禁止出戏的铁律 | 想改「什么时候发图」「图片要不要解读」这类行为规则 |
+
+改完双击 `scripts\应用人设.cmd`，**不用重启**，立即生效。
+
+> ⚠️ `工具段.txt` 里的 `{current_date_time}` 和 `{memory_content}` **不能删**，
+> 删了工作流就跑不起来（脚本会拦下来报错，不会写坏你的配置）。
+> 人设文件里不要出现方括号占位符以外的格式控制符。
+
+改完人设后建议同步一次工作流模板，让仓库里的示例和实际行为保持一致：
+
+```bash
+python tools/sync_persona_to_workflows.py           # 写入
+python tools/sync_persona_to_workflows.py --check   # 只校验（CI 会跑）
+```
+
 ---
 
 ## 提示词工程：几个真实踩过的坑
 
-这些坑都已经在 `config/workflows/chat_tools.json` 里处理好了，你自己改人设时请注意：
+这些坑都已经在 `persona/工具段.txt` 里处理好了，你自己改人设时请注意：
 
 1. **写"不要顺从"会用力过猛**。加了"会拒绝"之后，用户明确说"发个表情包"它回「不发 / 凭什么你说发就发」。必须同时写例外条款：*明确开口要图时一定要给，可以嘴上嫌弃*。
 2. **工具结果会让模型打破第四面墙**。它会说出「那个图是系统塞给我的」。需要在提示词里立铁律：禁止提"系统/工具/自动/生成"，禁止解释或评论发图这件事本身。
 3. **模型会自己打方括号占位符**，比如正文里冒出 `[表情包]`（模仿 QQ 的显示方式）。这不是接口渲染的，必须显式禁止。
 4. **难过的时候别发图**。不写这条，它会在你说"被领导骂了"的时候甩一张搞笑表情过来。
+5. **模型会用换行符代替 `<break>` 分条**。它写出「自己不会找啊\n拿去」时，两句话会挤在同一个气泡里，一眼就假。必须写明「分条只能用 `<break>`，不要用换行」，并在旁边给出正误对照。
+6. **"看懂图"和"不解读图"是两件事**。默认让人设**不解读**图片（否则它会变成图片解说员，每张表情都要点评两句），
+   只在对方**文字里明确要求**时才解读。视觉模型照旧开着，只是行为上克制。
+7. **图片可能是空的**。对方说"这张图是什么"但这条消息里其实没图时，必须交代"就说看不到，不许编造"——
+   否则模型会顺着上一张图编出内容。
 
 ---
 
@@ -249,22 +301,26 @@ scripts\安装.cmd
 
 ```bash
 python -m pip install -e ".[dev]"          # 只有 pyyaml + pre-commit
-python -m unittest discover -s tests -v    # 30 例，全离线，不碰网络
+python -m unittest discover -s tests -v    # 39 例，全离线，不碰网络
 python tools/make_cmd.py --check           # 批处理编码与生成器一致性
+python tools/sync_persona_to_workflows.py --check   # 工作流模板与人设是否同步
 pre-commit install                         # 提交前自动跑上面这些 + 密钥扫描
 ```
 
 CI（`.github/workflows/ci.yml`）在 **Ubuntu + Windows × Python 3.11/3.13** 上跑：
-语法编译、单元测试、批处理编码一致性、配置文件可解析性、密钥扫描。
+语法编译、单元测试、批处理编码一致性、工作流与人设同步性、配置文件可解析性、密钥扫描。
 
 测试覆盖的是这个项目真正容易坏的地方：
 
 - 图库关键词匹配（曾经因为"偷来的"文件夹里的"来""的"两个字抢走别的分类的图）
 - 收录器的过滤规则（机器人自己发的图不能被偷回来、照片不能被当表情包）
-- 配置模板不含真实密钥、模型名没写错、规则优先级没搞反
+- 配置模板不含真实密钥、模型名没写错、规则优先级没搞反、握手口令没写死
 - 图源补丁的幂等性与语法自检
-- **提示词铁律是否还在**（`test_config.py::WorkflowTest`）——
+- **人设与工具说明的完整性**（`test_config.py::WorkflowTest`）——
+  占位符、图片铁律、铁律段、`<break>` 规则、搜索工具是否还在。
   这些断言对应的是真实翻车记录，删掉它们等于把 bug 放回去
+- **工作流模板与人设文件是否同步**（`PersonaSyncTest`）——
+  不同步就会出现"改了人设但机器人没变"
 
 细节见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
@@ -277,8 +333,11 @@ CI（`.github/workflows/ci.yml`）在 **Ubuntu + Windows × Python 3.11/3.13** �
 | 完全不回消息 | 多半是 QQ 掉登录。重跑 `一键启动.cmd` 并扫码；确认主程序窗口有 `OneBot ... Connected` |
 | 文字能回、图发不出 | 图库没起（`启动图库.cmd`），或图库是空的（先在 QQ 里发几张图让它收） |
 | 说"发个表情包"只回文字 | 工具由模型决定调用，偶发不触发，重发一次即可 |
-| 回复里出现 `[表情包]`、"系统"等字眼 | 提示词被改坏了，用 `git checkout config/workflows/` 还原后重跑 `配置.cmd` |
-| 改了人设没生效 | 确认改的是 `persona\人设.txt`，并且跑了 `应用人设.cmd` |
+| 说"发个表情包"被回「凭什么」 | 提示词丢了例外条款，见坑 1 |
+| 回复里出现 `[表情包]`、"系统"等字眼 | 提示词被改坏了，用 `git checkout persona/` 还原后重跑 `应用人设.cmd` |
+| 它开始解读你发的表情包 | 工具段里的「图片铁律」被删了，见坑 6 |
+| 改了人设没生效 | 确认改的是 `persona\` 下的文件、跑了 `应用人设.cmd`；仓库模板可用 `python tools/sync_persona_to_workflows.py` 同步 |
+| 启动报占位符缺失 | `工具段.txt` 里的 `{current_date_time}` / `{memory_content}` 被删了，补回来 |
 | 脚本双击报"命令语法不正确" | `.cmd` 被存成 UTF-8 了。改 `tools\make_cmd.py` 后重跑它生成（必须 GBK+CRLF） |
 | NapCat 端口不是 6100 | 多开时它会自动递增。跑一次 `配置.cmd` 会把端口钉死 |
 | 图片下载慢/超时 | 本机 DNS 若是 `8.8.8.8`/`4.2.2.1`，国内站点会解析到海外节点。建议改 `223.5.5.5` / `119.29.29.29` |
@@ -294,7 +353,8 @@ CI（`.github/workflows/ci.yml`）在 **Ubuntu + Windows × Python 3.11/3.13** �
 - **不是服务器**：机器人跑在你电脑上，关机/睡眠/断网就离线。
 - **群聊默认会回复每一条消息**（规则里带 `fallback`）。这在活跃群里既费钱又扰民，建议把 `config/rules.yaml` 里 `chat_normal` 的 `fallback` 去掉，只保留 `/chat` 前缀或被@触发。
 - **隐私**：自动收录会把别人在群里发的图存到你本地。自用没问题，**不要二次分发**，也不要提交到 git（`.gitignore` 已经排除整个 `表情包/`）。
-- **默认口令**：`config/napcat.onebot11.json` 与 `config/kirara.config.yaml` 里的 OneBot access_token 是同一个默认值，只用于本机回环通信。想更安全就把两处同时改成随机串。
+- **握手口令**：`config/napcat.onebot11.json` 与 `config/kirara.config.yaml` 里写的是同一个 `${ONEBOT_TOKEN}` 占位符，
+  由安装脚本用 `.env` 里的值（留空则自动生成随机串）替换，两边始终一致。它只用于本机回环通信，但**不要把真实值提交进仓库**。
 - 本项目与腾讯、DeepSeek 均无关联。
 
 ---

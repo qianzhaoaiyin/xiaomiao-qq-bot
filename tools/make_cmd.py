@@ -185,15 +185,50 @@ pause
 
 SCRIPTS["应用人设.cmd"] = HEADER + FIND_PY + '''title 应用人设
 echo ============================================================
-echo    把 persona\\人设.txt 应用到机器人
+echo    把 persona\\ 下的两份文件应用到机器人
 echo ------------------------------------------------------------
 echo    用法：
-echo      1. 用记事本改 persona\\人设.txt
-echo      2. 双击本脚本
+echo      1. 改 persona\\人设.txt   —— 角色：身份、性格、说话风格
+echo      2. 改 persona\\工具段.txt —— 工具规则：发图/ 看图 / 搜索 / 定时
+echo      3. 双击本脚本
 echo    不用重启 kirara，改完立刻生效。
+echo ------------------------------------------------------------
+echo    注意：工具段.txt 里的 {current_date_time} 和 {memory_content}
+echo    是记忆与时间的占位符，不能删，删了脚本会直接报错。
 echo ============================================================
 echo.
 "%PY%" "%ROOT%\\bot\\apply_persona.py"
+echo.
+pause
+'''
+
+SCRIPTS["部署到GitHub.cmd"] = HEADER + FIND_PY + '''title 部署到 GitHub
+echo ============================================================
+echo    把本仓库部署到 GitHub
+echo ------------------------------------------------------------
+echo    会做这些事：
+echo      1. 自检（单元测试 / 人设同步 / 批处理编码 / 密钥扫描）
+echo      2. 把README 里的 your-name 占位符换成你的用户名
+echo      3. 提交，然后建仓并推送
+echo ------------------------------------------------------------
+echo    没装 gh（GitHub CLI）的话会提示你怎么装。
+echo    没配 git 身份的话会提示你怎么配，不会替你乱签名。
+echo ============================================================
+echo.
+set "OWNER="
+set /p "OWNER=你的 GitHub 用户名或组织名（直接回车取消）: "
+if not defined OWNER (
+    echo 已取消。
+    pause
+    exit /b
+)
+echo.
+set "VIS="
+set /p "VIS=仓库 visibility？输入 public 或 private（默认 public，直接回车用默认）: "
+set "PRIV="
+if /i "%VIS%"=="private" set "PRIV=--private"
+echo.
+"%PY%" "%ROOT%\\tools\\deploy_github.py" --owner "%OWNER%" %PRIV%
 echo.
 pause
 '''

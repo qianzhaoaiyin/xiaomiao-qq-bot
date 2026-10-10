@@ -53,6 +53,10 @@ class KiraraConfigTest(unittest.TestCase):
         self.assertNotRegex(self.text, r"sk-[A-Za-z0-9]{16,}", "模板里绝不能有真实 key")
         self.assertIn("${DEEPSEEK_API_KEY}", self.text)
 
+    def test_握手口令走占位符(self):
+        self.assertIn("${ONEBOT_TOKEN}", self.text)
+        self.assertNotIn("KiraraQQ2026", self.text, "本机握手口令不该提交进仓库")
+
     def test_视觉模型已配置(self):
         self.assertIn("deepseek-v4-flash-vision-exp", self.text, "没有视觉模型就看不懂表情包")
 
@@ -131,19 +135,84 @@ class WorkflowTest(unittest.TestCase):
         for need in ("random_emoji", "sougou_image_search", "create_task"):
             self.assertIn(need, names)
 
+    def test_搜索与天气工具已挂上(self):
+        # 卡片里明确要求「不懂就搜、别瞎答」，没有搜索工具这条人设是空话
+        names = self.blocks["tools"]["config"]["available_block_names"]
+        self.assertIn("web_search_by_keyword", names)
+        self.assertIn("weather_search", names)
+
     def test_人设与提示词铁律都在(self):
         sp = self.blocks["system_prompt"]["config"]["text"]
-        self.assertIn("猫娘", sp)
+        self.assertIn("鲸鱼娘", sp, "人设没灌进去")
         self.assertIn("{memory_content}", sp, "记忆占位符丢了机器人就会失忆")
         self.assertIn("{current_date_time}", sp)
-        self.assertIn("主动发表情包", sp)
+        self.assertIn("发表情包", sp)
+        self.assertIn("气氛到了就主动发一张", sp, "没有「主动发图」的规则，它就得等你开口要")
         self.assertIn("铁律", sp, "没有铁律它会说出'系统塞给我的'这种出戏话")
         self.assertIn("方括号占位符", sp, "不禁就会在正文里打 [表情包]")
         self.assertIn("明确开口要图", sp, "没有这条例外，它会连你的正当要求一起拒绝")
+        self.assertIn("联网搜索", sp, "没告诉它有搜索工具，它不会去查")
+        self.assertIn("`<break>`", sp, "没有分段规则，它会把三句话塞进一个气泡")
+
+    def test_图片默认不解读(self):
+        # 这是人设里优先级最高的一条：别人发图/发表情包时当没看见，
+        # 只有对方在文字里明确要求看图才解读。少了它机器人会秒变图片解说员。
+        sp = self.blocks["system_prompt"]["config"]["text"]
+        self.assertIn("默认当作没看见内容", sp)
+        self.assertIn("唯一的例外", sp)
 
     def test_不含真实密钥或个人QQ号(self):
         raw = json.dumps(self.wf, ensure_ascii=False)
         self.assertNotRegex(raw, r"sk-[A-Za-z0-9]{16,}")
+        self.assertNotRegex(raw, r"KiraraQQ\d{4}", "OneBot 握手口令不该写死在模板里")
+
+
+class PersonaSyncTest(unittest.TestCase):
+    """工作流模板里的 system_prompt 必须和 persona/ 下的文件一致。
+
+    不一致的后果：改了人设文件但机器人没变，或者仓库示例和实际行为对不上。
+    """
+
+    def test_两份人设文件都在(self):
+        self.assertTrue(paths.PERSONA_FILE.exists(), "缺少 persona/人设.txt")
+        self.assertTrue(paths.TOOLS_FILE.exists(), "缺少 persona/工具段.txt")
+
+    def test_工具段含必需占位符(self):
+        for ph in paths.REQUIRED_PLACEHOLDERS:
+            self.assertIn(ph, paths.TOOLS_FILE.read_text(encoding="utf-8"),
+                          "工具段缺少占位符 %s，工作流会跑不起来" % ph)
+
+    def test_缺占位符时构造会报错而不是写出坏配置(self):
+        good = paths.TOOLS_FILE.read_text(encoding="utf-8")
+        try:
+            paths.build_system_prompt()
+            with self.assertRaises(ValueError):
+                paths.TOOLS_FILE.write_text(good.replace("{memory_content}", ""), encoding="utf-8")
+                paths.build_system_prompt()
+        finally:
+            paths.TOOLS_FILE.write_text(good, encoding="utf-8")
+
+    def test_模板与人设同步(self):
+        import subprocess
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "sync_persona_to_workflows.py"), "--check"],
+            capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0,
+                         "工作流模板与人设不同步，跑 python tools/sync_persona_to_workflows.py\n%s"
+                         % (r.stdout + r.stderr)[-500:])
+
+
+class NapCatConfigTest(unittest.TestCase):
+    def test_握手口令用占位符(self):
+        p = paths.CONFIG_DIR / "napcat.onebot11.json"
+        self.assertTrue(p.exists(), "缺少 %s" % p)
+        text = p.read_text(encoding="utf-8")
+        self.assertIn("${ONEBOT_TOKEN}", text, "口令必须走占位符，不能写死")
+        self.assertNotIn("KiraraQQ2026", text)
+
+    def test_env示例里有口令项(self):
+        text = (paths.ROOT / ".env.example").read_text(encoding="utf-8")
+        self.assertIn("ONEBOT_TOKEN", text)
 
 
 class PatchTest(unittest.TestCase):

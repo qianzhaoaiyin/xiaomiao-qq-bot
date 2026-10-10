@@ -3,7 +3,7 @@
 
 PYTHON ?= python
 
-.PHONY: help test lint compile cmd cmd-check secrets install provision start stop status guard clean-cache
+.PHONY: help test lint compile cmd cmd-check persona persona-check secrets install provision start stop status guard clean-cache
 
 help:
 	@echo "可用目标："
@@ -11,8 +11,10 @@ help:
 	@echo "  make compile     语法编译检查"
 	@echo "  make cmd         重新生成 scripts/*.cmd（GBK+CRLF）"
 	@echo "  make cmd-check   校验 .cmd 与生成器一致、编码正确"
+	@echo "  make persona     把 persona/ 同步进 config/workflows/*.json"
+	@echo "  make persona-check  校验工作流模板与人设一致"
 	@echo "  make secrets     扫描仓库里是否混入密钥"
-	@echo "  make lint        compile + cmd-check + secrets 一把梭"
+	@echo "  make lint        compile + cmd-check + persona-check + secrets 一把梭"
 	@echo "  ---- 以下需要本机已安装（Windows）----"
 	@echo "  make install     下载 kirara/NapCat 并灌配置"
 	@echo "  make provision   只灌配置与工作流"
@@ -33,11 +35,20 @@ cmd:
 cmd-check:
 	$(PYTHON) tools/make_cmd.py --check
 
+persona:
+	$(PYTHON) tools/sync_persona_to_workflows.py
+
+persona-check:
+	$(PYTHON) tools/sync_persona_to_workflows.py --check
+
 secrets:
 	@bash -c 'if git grep -nIE "sk-[A-Za-z0-9]{16,}" -- . ":!README.md" ":!CHANGELOG.md"; then \
-		echo "疑似真实 API Key，请移除后再提交"; exit 1; else echo "未发现密钥"; fi'
+		echo "疑似真实 API Key，请移除后再提交"; exit 1; \
+	elif git grep -nIE "(access_token|\"token\"|apikey|api_key|secret_key)\s*[:=]\s*\"?[A-Za-z0-9_@.-]{8,}" -- config/; then \
+		echo "config/ 里出现了写死的密钥/口令，应改用占位符"; exit 1; \
+		else echo "未发现密钥"; fi'
 
-lint: compile cmd-check secrets
+lint: compile cmd-check persona-check secrets
 	@echo "lint 通过"
 
 install:

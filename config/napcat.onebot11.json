@@ -22,7 +22,7 @@
         "url": "ws://127.0.0.1:8080/im/websocket/onebot/kirara01/ws",
         "reportSelfMessage": false,
         "messagePostFormat": "array",
-        "token": "KiraraQQ2026",
+        "token": "${ONEBOT_TOKEN}",
         "debug": false,
         "heartInterval": 30000,
         "reconnectInterval": 3000,

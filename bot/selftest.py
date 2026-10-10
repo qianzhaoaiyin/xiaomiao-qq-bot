@@ -96,10 +96,14 @@ def main():
 
     # 8. 对话与人设
     print("\n  --- 对话实测 ---")
-    for msg, sid, want_persona in [
-        ("在吗", "friend-selftest-1", True),
-        ("发个表情包", "friend-selftest-1", False),
-        ("哈哈哈哈笑死我了", "group-selftest:10001", False),
+    # 出戏词：这些词一出现就说明它跳出角色了，或者在解释自己。
+    # 注意别把 "AI" 放进来——默认人设是**公开承认自己是 AI** 的，
+    # 「对，我是 AI」「V 我 50 解锁下一句」是刻意设计，不是出戏。
+    LEAK_WORDS = ["系统", "工具", "[表情包]", "{", "提示词", "作为一个语言模型", "function call"]
+    for msg, sid in [
+        ("在吗", "friend-selftest-1"),
+        ("发个表情包", "friend-selftest-1"),
+        ("哈哈哈哈笑死我了", "group-selftest:10001"),
     ]:
         label = "群聊" if sid.startswith("group-") else "私聊"
         try:
@@ -107,7 +111,7 @@ def main():
             d = k.chat(msg, sid)
             txt = " / ".join(str(m)[:70] for m in d.get("message", []))
             imgs = len(d.get("image", []))
-            leak = [w for w in ["系统", "工具", "[表情包]", "{", "AI", "模型"] if w in txt]
+            leak = [w for w in LEAK_WORDS if w in txt]
             ok = bool(txt.strip()) and not leak
             if "表情包" in msg:
                 ok = ok and imgs > 0

@@ -30,6 +30,9 @@ jobs:
       - name: 单元测试
         run: python -m unittest discover -s tests -v
 
+      - name: 工作流模板与人设同步性
+        run: python tools/sync_persona_to_workflows.py --check
+
       - name: 批处理脚本编码检查（GBK + CRLF，且与生成器一致）
         run: python tools/make_cmd.py --check
 
@@ -43,6 +46,12 @@ jobs:
           fi
           if git grep -nI -e "BEGIN .*PRIVATE KEY" -- .; then
             echo "::error::仓库里出现了私钥"
+            exit 1
+          fi
+          # config/ 下的口令类字段必须是 \${占位符}，不能是写死的值。
+          # 只扫 config/，避免误伤 tests/ 里"断言它不存在"的字符串。
+          if git grep -nIE '(access_token|"token"|apikey|api_key|secret_key)\s*[:=]\s*"?[A-Za-z0-9_@.-]{8,}' -- config/; then
+            echo "::error::config/ 里出现了疑似写死的密钥/口令，应改用 \${...} 占位符"
             exit 1
           fi
           echo "未发现密钥"

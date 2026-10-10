@@ -5,7 +5,7 @@
 ## 开发环境
 
 ```bash
-git clone https://github.com/your-name/xiaomiao-qq-bot.git
+git clone https://github.com/qianzhaoaiyin/xiaomiao-qq-bot.git
 cd xiaomiao-qq-bot
 python -m pip install -e ".[dev]"     # 只装 pyyaml + pre-commit
 pre-commit install
@@ -17,10 +17,16 @@ pre-commit install
 ## 跑测试
 
 ```bash
-python -m unittest discover -s tests -v      # 30 例，全部离线，不碰网络
+python -m unittest discover -s tests -v      # 39 例，全部离线，不碰网络
 python tools/make_cmd.py --check             # 批处理编码与生成器一致性
+python tools/sync_persona_to_workflows.py --check   # 工作流模板与 persona/ 是否同步
 python -m compileall -q bot tools tests      # 语法检查
 ```
+
+改了 `persona/` 下的文件后，**必须**跑一次
+`python tools/sync_persona_to_workflows.py` 把新的人设同步进 `config/workflows/*.json`，
+否则仓库里的模板和实际行为会不一致（CI 会红）。只想本地生效、不想动仓库里的模板，
+直接双击 `scripts\应用人设.cmd` 即可。
 
 CI 会在 Ubuntu + Windows × Python 3.11/3.13 上跑同样这几步，外加密钥扫描。
 
