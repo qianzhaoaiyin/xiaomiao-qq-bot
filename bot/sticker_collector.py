@@ -69,7 +69,8 @@ def _load_index():
 def _save_index(idx):
     STOLEN.mkdir(parents=True, exist_ok=True)
     tmp = str(INDEX) + ".tmp"
-    json.dump(idx, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(idx, f, ensure_ascii=False, indent=1)
     os.replace(tmp, str(INDEX))
 
 
@@ -89,7 +90,8 @@ def vision_tag(path):
     ext = os.path.splitext(path)[1].lower().lstrip(".")
     mime = {"jpg": "jpeg"}.get(ext, ext)
     try:
-        b64 = base64.b64encode(open(path, "rb").read()).decode()
+        with open(path, "rb") as fh:
+            b64 = base64.b64encode(fh.read()).decode()
     except Exception:
         return None
     body = {
@@ -126,7 +128,8 @@ def _gallery_hashes():
         for n in names:
             if n.lower().endswith(IMG_EXT):
                 try:
-                    hs.add(hashlib.sha1(open(os.path.join(dirpath, n), "rb").read()).hexdigest())
+                    with open(os.path.join(dirpath, n), "rb") as fh:
+                        hs.add(hashlib.sha1(fh.read()).hexdigest())
                 except Exception:
                     pass
     return hs
@@ -202,7 +205,8 @@ def scan_once(do_tag=True):
                 dst = STOLEN / (dst_name[:-len(ext)] + "_%d%s" % (n, ext))
                 n += 1
             try:
-                dst.write_bytes(open(src, "rb").read())
+                with open(src, "rb") as fh:
+                    dst.write_bytes(fh.read())
             except Exception as e:
                 _log("复制失败", e)
                 _stats["errors"] += 1

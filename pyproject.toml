@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xiaomiao-qq-bot"
+version = "1.0.0"
+description = "跑在本地 Windows 上的 QQ 猫娘机器人：主动发表情包、自动收录并打标、看懂图片、有脾气不顺从"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["qq", "chatbot", "kirara-ai", "napcat", "onebot", "deepseek", "catgirl"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+]
+
+# 运行期零第三方依赖：图库服务、收录器、守护、自测全部只用标准库。
+# kirara-ai 及其插件由 scripts/install.ps1 装进 kirara 自带的嵌入式 Python，
+# 不使用本项目的运行环境——这是刻意的，避免两套依赖互相打架。
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pyyaml>=6.0", "pre-commit>=3.5"]
+
+[project.urls]
+Homepage = "https://github.com/your-name/xiaomiao-qq-bot"
+Issues = "https://github.com/your-name/xiaomiao-qq-bot/issues"
+
+[tool.setuptools]
+packages = ["bot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

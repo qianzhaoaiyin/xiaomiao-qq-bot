@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: ${{ matrix.os }} / py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: 安装测试依赖
+        run: python -m pip install --upgrade pip pyyaml
+
+      - name: 语法编译检查
+        run: python -m compileall -q bot tools tests
+
+      - name: 单元测试
+        run: python -m unittest discover -s tests -v
+
+      - name: 批处理脚本编码检查（GBK + CRLF，且与生成器一致）
+        run: python tools/make_cmd.py --check
+
+      - name: 密钥扫描
+        shell: bash
+        run: |
+          set -e
+          if git grep -nIE "sk-[A-Za-z0-9]{16,}" -- . ':!README.md'; then
+            echo "::error::仓库里出现了疑似真实 API Key"
+            exit 1
+          fi
+          if git grep -nI -e "BEGIN .*PRIVATE KEY" -- .; then
+            echo "::error::仓库里出现了私钥"
+            exit 1
+          fi
+          echo "未发现密钥"
+
+      - name: 配置文件可解析
+        shell: bash
+        run: |
+          python -c "import yaml,glob,sys;[yaml.safe_load(open(f,encoding='utf-8')) for f in glob.glob('config/*.yaml')];print('yaml ok')"
+          python -c "import json,glob;[json.load(open(f,encoding='utf-8')) for f in glob.glob('config/**/*.json',recursive=True)];print('json ok')"

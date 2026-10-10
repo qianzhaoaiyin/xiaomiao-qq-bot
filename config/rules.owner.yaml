@@ -1,0 +1,122 @@
+# 严格模式派发规则（当 .env 里填了 OWNER_QQ 时由 provision.py 使用）
+#
+# 设计目标：
+#   1. 只有主人能触发完整人设与工具（省钱 + 防骚扰 + 降低账号风控风险）
+#   2. 陌生人私聊：只记录不回复（memory_store 工作流不会发消息）
+#   3. 群聊：被@、/chat 前缀或明确关键词才回，其余一律静默
+#      —— 群里每条都回既烧钱又扰民，这是"个人 AI 朋友"最合适的默认
+#
+# 注意：${OWNER_QQ} 由 provision.py 用 .env 里的 OWNER_QQ 替换
+# rule_groups 之间是 AND，组内 rules 按 operator 组合
+
+- rule_id: system_help
+  name: 帮助命令
+  description: 显示帮助信息
+  workflow_id: system:help
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /help
+
+- rule_id: system_clear_memory
+  name: 清空记忆
+  description: 清空当前对话的记忆
+  workflow_id: system:clear_memory
+  priority: 10
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: prefix
+      config:
+        prefix: /清空记忆
+
+- rule_id: owner_private
+  name: 主人私聊
+  description: 主人的私聊走完整人设 + 表情包 + 定时工具
+  workflow_id: chat:tools
+  priority: 9
+  enabled: true
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.9
+  rule_groups:
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 私聊
+  - operator: or
+    rules:
+    - type: sender
+      config:
+        sender_id: "${OWNER_QQ}"
+
+- rule_id: group_active
+  name: 群聊被@或命令
+  description: 群里只有被@、/chat 开头或明确要图/要提醒时才回
+  workflow_id: chat:tools
+  priority: 7
+  enabled: true
+  metadata:
+    category: chat
+    permission: user
+    temperature: 0.7
+  rule_groups:
+  - operator: or
+    rules:
+    - type: bot_mention
+      config: {}
+    - type: prefix
+      config:
+        prefix: /chat
+    - type: keyword
+      config:
+        keywords:
+        - 表情包
+        - 发个表情
+        - 来张图
+        - 发张图
+        - 提醒我
+        - 定时
+        - 闹钟
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 群聊
+
+- rule_id: stranger_private
+  name: 陌生人私聊（只记录不回复）
+  description: 非主人的私聊静默处理，避免被骚扰和不必要的开销
+  workflow_id: chat:memory_store
+  priority: 6
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: chat_type
+      config:
+        chat_type: 私聊
+  - operator: or
+    rules:
+    - type: sender_mismatch
+      config:
+        sender_id: "${OWNER_QQ}"
+
+- rule_id: fallback
+  name: 默认规则
+  description: 其余消息只记录，不回复
+  workflow_id: chat:memory_store
+  priority: 0
+  enabled: true
+  rule_groups:
+  - operator: or
+    rules:
+    - type: fallback
+      config: {}

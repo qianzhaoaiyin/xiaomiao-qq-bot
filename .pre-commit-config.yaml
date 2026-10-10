@@ -1,0 +1,45 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        # .cmd 由生成器产出，不要让钩子改动它们的字节
+        exclude: '^scripts/.*\.cmd$'
+      - id: end-of-file-fixer
+        exclude: '^scripts/.*\.cmd$'
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=512']
+      - id: detect-private-key
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: ['--fix=lf']
+        exclude: '^scripts/.*\.cmd$'
+
+  - repo: local
+    hooks:
+      - id: compile-python
+        name: 编译检查所有 Python 文件
+        entry: python -m compileall -q bot tools tests
+        language: system
+        pass_filenames: false
+
+      - id: unit-tests
+        name: 单元测试
+        entry: python -m unittest discover -s tests
+        language: system
+        pass_filenames: false
+
+      - id: cmd-encoding
+        name: 批处理编码与生成器一致性
+        entry: python tools/make_cmd.py --check
+        language: system
+        pass_filenames: false
+        files: '^(scripts/.*\.cmd|tools/make_cmd\.py)$'
+
+      - id: no-secrets
+        name: 禁止提交密钥
+        entry: bash -c 'if git grep -nIE "sk-[A-Za-z0-9]{16,}" -- . ":!README.md" ":!CHANGELOG.md"; then echo "疑似真实 API Key，已阻止提交"; exit 1; fi'
+        language: system
+        pass_filenames: false

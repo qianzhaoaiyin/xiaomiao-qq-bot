@@ -33,6 +33,34 @@ PORT = paths.gallery_port()
 EXT = (".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp")
 
 
+def _name_of(path: str) -> str:
+    """用于匹配的"名字"= 所在文件夹名 + 文件名（不含扩展名）。
+
+    刻意不用完整路径：路径里的盘符、用户名、临时目录字符会造成误命中
+    （曾经出现过关键词匹配到 C:\\Users\\<用户名> 里的字，挑出毫不相干的图）。
+    """
+    base = os.path.splitext(os.path.basename(path))[0]
+    return (os.path.basename(os.path.dirname(path)) + " " + base).lower()
+
+
+def _score(name: str, key: str):
+    """给候选图打分：返回 (与关键词的最长公共子串长度, 命中的不同汉字个数)。
+
+    为什么不用"单个字命中就算"：图库里有个文件夹叫「偷来的」，
+    只要关键词里带"来"或"的"就会命中它，把真正该发的图挤掉。
+    用最长公共子串做主指标，至少要有两个连续汉字对上才算命中。
+    """
+    best = 0
+    n = len(name)
+    for i in range(n):
+        for j in range(i + 2, min(n, i + 10) + 1):
+            if name[i:j] in key:
+                best = j - i
+                break
+    chars = sum(1 for ch in set(key) if '一' <= ch <= '鿿' and ch in name)
+    return best, chars
+
+
 def scan(kw: str = ""):
     """收集候选图片。kw 命中分类目录名或文件名都算。"""
     files = []
@@ -45,18 +73,22 @@ def scan(kw: str = ""):
     if not files:
         return files
     key = (kw or "").strip().lower()
-    if key:
-        hits = [f for f in files
-                if key in os.path.basename(os.path.dirname(f)).lower()
-                or key in os.path.splitext(os.path.basename(f))[0].lower()]
-        if hits:
-            return hits
-        # 模型经常传一整句话过来，退化成按单字做宽松匹配
-        for ch in set(key):
-            if '一' <= ch <= '鿿':
-                loose = [f for f in files if ch in f]
-                if loose:
-                    return loose
+    if not key:
+        return files
+
+    # 1) 整串命中（分类名或文件名里包含完整关键词）
+    hits = [f for f in files if key in _name_of(f)]
+    if hits:
+        return hits
+
+    # 2) 模型经常传一整句话过来，按"最长公共子串"打分挑最贴的
+    scored = sorted(((_score(_name_of(f), key), f) for f in files),
+                    key=lambda x: x[0], reverse=True)
+    if scored and scored[0][0][0] >= 2:
+        top = scored[0][0]
+        return [f for s, f in scored if s == top]
+
+    # 3) 实在对不上就全库随机：宁可发一张不那么贴切的，也别不回图
     return files
 
 

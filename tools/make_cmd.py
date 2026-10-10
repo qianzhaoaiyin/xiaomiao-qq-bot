@@ -57,6 +57,8 @@ echo    NapCat     http://127.0.0.1:%NAPCAT_PORT%
 echo    表情包图库 http://127.0.0.1:%GALLERY_PORT%/list
 echo ============================================================
 echo.
+"%PY%" "%ROOT%\bot\watchdog.py" --resume
+echo.
 
 netstat -na | findstr "LISTENING" | findstr ":%GALLERY_PORT% " >nul
 if errorlevel 1 (
@@ -131,16 +133,18 @@ echo.
 pause
 '''
 
-SCRIPTS["停止.cmd"] = HEADER + READ_ENV + r'''title 小喵 QQ 机器人 - 停止
+SCRIPTS["停止.cmd"] = HEADER + FIND_PY + READ_ENV + r'''title 小喵 QQ 机器人 - 停止
 echo ============================================================
 echo    小喵 QQ 机器人  停止
 echo ============================================================
 echo.
+"%PY%" "%ROOT%\bot\watchdog.py" --pause
 call :kill %NAPCAT_PORT% NapCat协议端
 call :kill 8080 kirara主程序
 call :kill %GALLERY_PORT% 表情包图库
 echo.
 echo    已停止。只结束监听这几个端口的进程及其子进程。
+echo    守护也已暂停，不会把它们再拉起来。
 echo ============================================================
 echo.
 pause
@@ -158,6 +162,25 @@ exit /b
 :kill_none
 echo   %~2 未在运行（端口 %~1）
 exit /b
+'''
+
+SCRIPTS["守护.cmd"] = HEADER + FIND_PY + '''title 小喵 QQ 机器人 - 守护
+echo ============================================================
+echo    守护进程：掉线自动拉起，状态变化时给你发 QQ 私聊
+echo ------------------------------------------------------------
+echo    巡检间隔由 .env 的 WATCHDOG_INTERVAL 控制（默认 60 秒）
+echo    按 Ctrl+C 或关窗口即可停止守护（不会停机器人）
+echo    想彻底停机器人请用 scripts\\停止.cmd
+echo ============================================================
+echo.
+"%PY%" "%ROOT%\\bot\\watchdog.py"
+pause
+'''
+
+SCRIPTS["状态.cmd"] = HEADER + FIND_PY + '''title 小喵 QQ 机器人 - 状态
+"%PY%" "%ROOT%\\bot\\watchdog.py" --once
+echo.
+pause
 '''
 
 SCRIPTS["应用人设.cmd"] = HEADER + FIND_PY + '''title 应用人设
@@ -199,11 +222,49 @@ pause
 '''
 
 
+def build(name, text):
+    return text.replace("\r\n", "\n").replace("\n", "\r\n").encode("gbk", "replace")
+
+
+def check():
+    r"""CI 用：确认 scripts\*.cmd 与生成器一致、编码正确、没被手改坏。"""
+    bad = 0
+    for name, text in SCRIPTS.items():
+        p = os.path.join(OUT, name)
+        want = build(name, text)
+        if not os.path.isfile(p):
+            print("  [缺失] %s —— 请运行 python tools\\make_cmd.py" % name)
+            bad += 1
+            continue
+        raw = open(p, "rb").read()
+        try:
+            raw.decode("gbk")
+        except Exception as e:
+            print("  [编码错] %s 不是合法 GBK：%s" % (name, e))
+            bad += 1
+            continue
+        if b"\r\n" not in raw:
+            print("  [换行错] %s 不是 CRLF" % name)
+            bad += 1
+        if b"/dev/null" in raw:
+            print("  [污染] %s 含 /dev/null（MSYS 把 >nul 改写过）" % name)
+            bad += 1
+        if raw != want:
+            print("  [不同步] %s 与 make_cmd.py 里的定义不一致，请重新生成" % name)
+            bad += 1
+        else:
+            print("  [ok] %s" % name)
+    print("\n检查完成：%d 个问题" % bad)
+    return 1 if bad else 0
+
+
 def main():
+    if "--check" in sys.argv:
+        return check()
     os.makedirs(OUT, exist_ok=True)
     for name, text in SCRIPTS.items():
         p = os.path.join(OUT, name)
-        data = text.replace("\r\n", "\n").replace("\n", "\r\n").encode("gbk", "replace")
+        data = build(name, text)
         with open(p, "wb") as f:
             f.write(data)
         # 自检：必须能用 GBK 解回来，且必须是 CRLF

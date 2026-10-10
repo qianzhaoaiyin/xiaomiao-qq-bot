@@ -1,10 +1,32 @@
 # 小喵 · QQ 猫娘机器人
 
+[![CI](https://github.com/your-name/xiaomiao-qq-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/xiaomiao-qq-bot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-green)
+![Deps](https://img.shields.io/badge/runtime%20deps-0-brightgreen)
+
 一个跑在**你自己 Windows 电脑**上的 QQ 聊天机器人：有人设、有长期记忆、会**主动发表情包**、能**看懂你发的表情包**、会**自动收录**你和群里发表情包、还能定时主动找你聊天。
 
 不是"关键词自动回复"那种玩具——它由大模型驱动，会拒绝、会记仇、会闹脾气，也会在你难过的时候安静陪着。
 
-> 月成本大约 **8～20 元**（按量计费的 API），不需要服务器。
+> 月成本大约 **8～20 元**（按量计费的 API），不需要服务器，运行期**零第三方依赖**（纯 Python 标准库）。
+
+---
+
+## 为什么不用 AstrBot / LangBot
+
+不是它们不好——AstrBot（41k star）和 LangBot（18k star）都是成熟框架。区别在于本项目**不重造框架**，而是站在 [kirara-ai](https://github.com/lss233/kirara-ai)（19k star）之上，只补它缺的四件事：
+
+| 缺口 | 本项目的补法 |
+|---|---|
+| 表情包图源全废（`api.lolimi.cn` 域名不存在、`fabiaoqing` 图床 403） | 本地 HTTP 图库：零月费、不受外网影响 |
+| 不会自己攒图 | 旁路收录器：自动收聊天里的图 + 视觉模型打标签，越聊越会斗图 |
+| 默认人格像客服、会无条件顺从 | 重写人设 + 提示词铁律（会拒绝、会记仇、不出戏） |
+| 群里每条都回、谁都能撩 | 严格模式规则 + 守护进程 + 状态自检 |
+
+所以这个仓库很小（`.git` 约 200KB），大件由安装脚本从上游官方 release 下载。
+决策理由见 [ARCHITECTURE.md](ARCHITECTURE.md)，改动历史见 [CHANGELOG.md](CHANGELOG.md)。
 
 ---
 
@@ -79,10 +101,11 @@
 ## 目录结构
 
 ```
-├── bot/                     本项目自己写的代码
+├── bot/                     本项目自己写的代码（纯标准库）
 │   ├── paths.py             路径与 .env 统一入口（整个文件夹可放任意位置）
-│   ├── gallery_server.py    本地表情包图库 HTTP 服务
+│   ├── gallery_server.py    本地表情包图库 HTTP 服务（含关键词打分算法）
 │   ├── sticker_collector.py 自动收录 + 视觉打标（"偷表情"）
+│   ├── watchdog.py          守护：掉线自动拉起 + 状态报告 + 通知主人
 │   ├── apply_persona.py     把人设.txt 应用到各工作流
 │   ├── provision.py         一键把配置/工作流灌进 kirara 与 NapCat
 │   ├── patch_sticker_source.py  把插件的失效图源换成本地图库
@@ -90,16 +113,21 @@
 │   └── kirara_api.py        kirara Web API 封装（含几个易踩的坑）
 ├── config/
 │   ├── kirara.config.yaml   kirara 主配置模板（key 用占位符）
-│   ├── rules.yaml           派发规则（私聊/群聊/关键词）
+│   ├── rules.yaml           宽松模式派发规则
+│   ├── rules.owner.yaml     严格模式派发规则（只回主人，推荐）
 │   ├── napcat.onebot11.json NapCat 反向 WS 配置
 │   └── workflows/           工作流定义（chat_tools / 多模态）
 ├── persona/人设.txt          人设，改这个文件就行
 ├── scripts/                 Windows 批处理（GBK+CRLF，见下方注意事项）
-├── tools/make_cmd.py        生成上面那些 .cmd 的脚本
+├── tools/make_cmd.py        生成上面那些 .cmd 的脚本（别手改 .cmd）
+├── tests/                   30 个单元测试，全部离线
+├── .github/workflows/       CI：双系统 × 双 Python 版本 + 密钥扫描
 ├── 表情包/                   你的图库（不进版本库）
 ├── kirara/  napcat/          安装脚本下载的大件（不进版本库）
 └── .env                     你的密钥（不进版本库）
 ```
+
+另有 [ARCHITECTURE.md](ARCHITECTURE.md)（架构与决策理由）、[CHANGELOG.md](CHANGELOG.md)、[CONTRIBUTING.md](CONTRIBUTING.md)、[Makefile](Makefile)。
 
 ---
 
@@ -117,7 +145,7 @@ scripts\安装.cmd
 
 然后：
 
-1. 用记事本打开 `.env`，填入 `DEEPSEEK_API_KEY`，并把 `KIRARA_WEBUI_PASSWORD` 改成你自己的密码
+1. 用记事本打开 `.env`，填入 `DEEPSEEK_API_KEY`、**你自己的 QQ 号 `OWNER_QQ`**（强烈建议，见下方"安全默认"），并把 `KIRARA_WEBUI_PASSWORD` 改成你自己的密码
 2. 双击 `scripts\一键启动.cmd`
 3. 首次启动打开 <http://127.0.0.1:8080>，把管理密码设成和 `.env` 里一致
 4. 双击 `scripts\配置.cmd`（写入工作流、检查插件、跑一次自测）
@@ -134,7 +162,9 @@ scripts\安装.cmd
 | 想干什么 | 怎么做 |
 |---|---|
 | 开机启动 | 双击 `scripts\一键启动.cmd`（想开机自启就把它的快捷方式放进 `shell:startup`） |
-| 关掉 | 双击 `scripts\停止.cmd` |
+| 关掉 | 双击 `scripts\停止.cmd`（同时会暂停守护，不会被自动拉起） |
+| 掉线自愈 | 双击 `scripts\守护.cmd` 常驻；掉线自动重启，状态变化时给你发 QQ 私聊 |
+| 看健康状况 | 双击 `scripts\状态.cmd`（四个服务 + 图库张数，一眼看完） |
 | 改人设 | 编辑 `persona\人设.txt` → 双击 `scripts\应用人设.cmd`（不用重启） |
 | 加表情包 | 往 `表情包\开心`、`表情包\晚安` 这类文件夹丢图，立刻生效 |
 | 看它偷了哪些图 | 浏览器开 <http://127.0.0.1:3100/stolen> |
@@ -176,6 +206,67 @@ scripts\安装.cmd
 2. **工具结果会让模型打破第四面墙**。它会说出「那个图是系统塞给我的」。需要在提示词里立铁律：禁止提"系统/工具/自动/生成"，禁止解释或评论发图这件事本身。
 3. **模型会自己打方括号占位符**，比如正文里冒出 `[表情包]`（模仿 QQ 的显示方式）。这不是接口渲染的，必须显式禁止。
 4. **难过的时候别发图**。不写这条，它会在你说"被领导骂了"的时候甩一张搞笑表情过来。
+
+---
+
+## 安全默认：填了 OWNER_QQ 才算装好
+
+`.env` 里的 `OWNER_QQ` 填你自己的 QQ 号后，`provision.py` 会自动换成**严格模式**规则：
+
+| 谁发消息 | 严格模式（推荐） | 宽松模式（OWNER_QQ 留空） |
+|---|---|---|
+| 你的私聊 | 完整人设 + 表情包 + 定时任务 | 同左 |
+| 陌生人私聊 | **只记录，不回复** | 照聊不误 |
+| 群里@它 / `/chat` / 明确要图 | 回复 | 回复 |
+| 群里其它消息 | **静默** | 每条都回 |
+
+宽松模式是上游的默认行为，但放在真实群里意味着：每条消息都要花两次模型调用的钱、
+群友会被刷屏、你的账号也更容易被风控。**除非你明确想要它当群聊机器人，否则请填 OWNER_QQ。**
+
+改完 `.env` 之后要重跑一次 `scripts\配置.cmd`（且 kirara 必须处于停止状态——
+规则文件在它退出时会被内存里的旧值覆盖，脚本会检测并提示）。
+
+---
+
+## 可靠性：守护进程
+
+`scripts\守护.cmd` 常驻后台，每 60 秒（`.env` 的 `WATCHDOG_INTERVAL`）巡检四项：
+图库端口、kirara 端口、NapCat 端口、**QQ 登录态**（查 NapCat 的 `get_login_info`）。
+
+- 哪个挂了就自动拉起来
+- 状态**发生变化**时给主人发一条 QQ 私聊（不刷屏）
+- `scripts\停止.cmd` 会把守护置为暂停，不会你刚停它又给你拉起来
+- `scripts\状态.cmd` 随时看一眼健康状况和图库张数
+
+日志在 `logs/watchdog.log`，超过 2MB 自动轮转一次。
+
+> 注意：QQ 登录态过期是守护**修不了**的（必须人扫码），它只能通知你。
+> 填好 `.env` 的 `BOT_QQ` 能让 NapCat 尝试免扫码快速登录，成功率看腾讯心情。
+
+---
+
+## 开发与测试
+
+```bash
+python -m pip install -e ".[dev]"          # 只有 pyyaml + pre-commit
+python -m unittest discover -s tests -v    # 30 例，全离线，不碰网络
+python tools/make_cmd.py --check           # 批处理编码与生成器一致性
+pre-commit install                         # 提交前自动跑上面这些 + 密钥扫描
+```
+
+CI（`.github/workflows/ci.yml`）在 **Ubuntu + Windows × Python 3.11/3.13** 上跑：
+语法编译、单元测试、批处理编码一致性、配置文件可解析性、密钥扫描。
+
+测试覆盖的是这个项目真正容易坏的地方：
+
+- 图库关键词匹配（曾经因为"偷来的"文件夹里的"来""的"两个字抢走别的分类的图）
+- 收录器的过滤规则（机器人自己发的图不能被偷回来、照片不能被当表情包）
+- 配置模板不含真实密钥、模型名没写错、规则优先级没搞反
+- 图源补丁的幂等性与语法自检
+- **提示词铁律是否还在**（`test_config.py::WorkflowTest`）——
+  这些断言对应的是真实翻车记录，删掉它们等于把 bug 放回去
+
+细节见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ---
 

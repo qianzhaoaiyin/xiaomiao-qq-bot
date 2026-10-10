@@ -64,19 +64,32 @@ def write_kirara_config(env):
 
 
 def write_rules(kirara_running):
-    src = paths.CONFIG_DIR / "rules.yaml"
+    """按 .env 里有没有 OWNER_QQ 选择规则集。
+
+    填了 OWNER_QQ -> config/rules.owner.yaml（严格模式：只回主人、群里被@才回、
+                     陌生人私聊静默）
+    没填          -> config/rules.yaml（宽松模式：谁都能聊、群里每条都回）
+    """
+    env = paths.load_env()
+    owner = (env.get("OWNER_QQ") or "").strip()
+    src = paths.CONFIG_DIR / ("rules.owner.yaml" if owner else "rules.yaml")
     dst = paths.kirara_data_dir() / "dispatch_rules" / "rules.yaml"
     if not src.exists():
-        print("  [跳过] 找不到 config/rules.yaml")
+        print("  [跳过] 找不到 %s" % src)
         return
     if kirara_running:
         print("  [!] kirara 正在运行，跳过 rules.yaml —— 它退出时会用内存里的旧规则覆盖回去。")
         print("      要改规则请先跑 scripts\\停止.cmd，再执行 provision.py --offline")
         return
+    text = src.read_text(encoding="utf-8").replace("${OWNER_QQ}", owner)
     dst.parent.mkdir(parents=True, exist_ok=True)
     _backup(dst)
-    shutil.copy2(str(src), str(dst))
-    print("  [写入] dispatch_rules/rules.yaml（私聊+群聊都走 chat:tools）")
+    _write(dst, text)
+    if owner:
+        print("  [写入] rules.yaml（严格模式）：只回主人 %s，群里被@/命令才回，陌生人静默" % owner)
+    else:
+        print("  [写入] rules.yaml（宽松模式）：任何人都能聊、群里每条都回")
+        print("         建议在 .env 里填 OWNER_QQ 启用严格模式，省钱也防骚扰")
 
 
 def write_napcat_config(env):

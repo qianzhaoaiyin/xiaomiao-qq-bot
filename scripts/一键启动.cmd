@@ -20,6 +20,8 @@ echo    NapCat     http://127.0.0.1:%NAPCAT_PORT%
 echo    ±íÇé°üÍ¼¿â http://127.0.0.1:%GALLERY_PORT%/list
 echo ============================================================
 echo.
+"%PY%" "%ROOT%\bot\watchdog.py" --resume
+echo.
 
 netstat -na | findstr "LISTENING" | findstr ":%GALLERY_PORT% " >nul
 if errorlevel 1 (
