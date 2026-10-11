@@ -294,11 +294,7 @@ ORIG_CLASS = '''class OneBotAdapter:
                         text_length = len(segment.data.get("text", ""))
 '''
 
-ORIG_SCOPES = '''from kirara_ai.im.sender import ChatSender, ChatType
-
-from .base import MemoryScope
-
-
+ORIG_SCOPES = '''
 class MemberScope(MemoryScope):
     """群成员作用域"""
 
@@ -465,9 +461,9 @@ class PersonMemoryPatchTest(unittest.TestCase):
 
         ns = types.ModuleType("fake")
         ns.__dict__["__name__"] = "fake_scopes"
-        # 去掉相对导入，夹具里没法建包
-        src = (ORIG_SCOPES + ppm.PERSON_SCOPE).replace("from .base import MemoryScope", "")
-        exec(compile(src, "scopes", "exec"),
+        # 夹具里不能有 import：kirara_ai 在本机装了、CI 上没装，
+        # 留着 import 会让这个测试「本机过、CI 挂」。名字都从 globals 传进去。
+        exec(compile(ORIG_SCOPES + ppm.PERSON_SCOPE, "scopes", "exec"),
              {"__name__": "fake_scopes",
               "ChatSender": FakeSender, "ChatType": FakeChatType,
               "MemoryScope": type("MemoryScope", (), {})}, ns.__dict__)
